@@ -82,7 +82,8 @@ async function call(method, url, body) {
   try {
     response = await fetch(url, {
       method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
+      // The API requires JSON on every write (CSRF guard), including body-less ones.
+      headers: method === "GET" ? undefined : { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
       cache: "no-store",
     });
