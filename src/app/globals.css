@@ -1,144 +1,177 @@
 @import "tailwindcss";
 
-/* Theme tokens. Dark is the default; light is opt-in via Settings (data-theme="light"). */
+/* Macrokite OS design tokens (dark theme). Source: macrokite-os-design/tokens.css */
 :root {
-  --bg: #090b0d;
-  --surface: #111519;
-  --surface-2: #161b20;
-  --surface-3: #1c2228;
-  --border: #252b31;
-  --border-strong: #343c45;
-  --text: #e7ebee;
-  --text-muted: #9ba5ae;
-  --text-subtle: #6c7782;
-  --accent: #4ae3c9;
-  --accent-strong: #6ff0da;
-  --accent-fg: #03201b;
-  --accent-soft: rgb(74 227 201 / 0.12);
-  --danger: #f87171;
-  --danger-soft: rgb(248 113 113 / 0.12);
-  --overlay: rgb(3 5 7 / 0.7);
-  --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px -12px rgb(0 0 0 / 0.6);
-  --shadow-lg: 0 24px 64px -16px rgb(0 0 0 / 0.75), 0 0 0 1px var(--border);
+  --bg-page: #0b0c0e;
+  --bg-sidebar: #0e1012;
+  --bg-card: #121417;
+  --bg-input: #0e1012;
+  --bg-hover: #1a1d21;
+  --bg-selected: #1f2226;
+  --bg-bubble: #17191d;
 
-  --tone-teal-fg: #4ae3c9;  --tone-teal-bg: rgb(74 227 201 / 0.12);
-  --tone-blue-fg: #7cb4ff;  --tone-blue-bg: rgb(124 180 255 / 0.12);
-  --tone-violet-fg: #b79cff; --tone-violet-bg: rgb(183 156 255 / 0.13);
-  --tone-amber-fg: #f5c46b; --tone-amber-bg: rgb(245 196 107 / 0.12);
-  --tone-red-fg: #ff8a8a;   --tone-red-bg: rgb(255 138 138 / 0.12);
-  --tone-green-fg: #6ee7a0; --tone-green-bg: rgb(110 231 160 / 0.12);
-  --tone-slate-fg: #a3adb7; --tone-slate-bg: rgb(163 173 183 / 0.1);
+  --border: #24272c;
+  --border-row: #1c1f23;
+  --border-sidebar: #1f2226;
+  --border-dashed: #2a2e34;
+
+  --text-strong: #f2f3f5;
+  --text: #e7e8ea;
+  --text-body: #d5d7db;
+  --text-soft: #c9ccd1;
+  --text-secondary: #a7abb3;
+  --text-muted: #8a8f98;
+  --text-faint: #6f747c;
+
+  --accent: #3fe0b5;
+  --accent-on: #062a20;
+  --accent-light: #8af0d3;
+  --accent-tint: #0f2e27;
+  --accent-tint-text: #d9fbf0;
+  --decision-bg: #0d1f1b;
+  --decision-border: #1f4a3f;
+  --decision-divider: #173a32;
+  --decision-meta: #7fbfae;
+
+  --danger: #ff8f7a;
+  --danger-border: #4a2a25;
+  --danger-outline: #3a2420;
+
+  --warning: #ffd7a1;
+  --warning-strong: #ffc98a;
+  --warning-tint: #33260f;
+  --warning-banner-bg: #17140d;
+  --warning-banner-border: #3d3218;
+
+  --phase-done: var(--accent);
+  --phase-current: var(--accent-light);
+  --phase-todo: #24272c;
+  --phase-done-hold: #5a5f66;
+  --phase-current-hold: #8a8f98;
+
+  --avatar-teal-bg: #1b3a32;   --avatar-teal-fg: #8af0d3;
+  --avatar-violet-bg: #2b2442; --avatar-violet-fg: #c9bfff;
+  --avatar-amber-bg: #3a2a1a;  --avatar-amber-fg: #ffc98a;
+  --avatar-blue-bg: #1f2e3d;   --avatar-blue-fg: #a9cff5;
+
+  --overlay: rgb(3 4 5 / 0.7);
   color-scheme: dark;
 }
 
-:root[data-theme="light"] {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f1f3f5;
-  --surface-3: #e9edf0;
-  --border: #e1e5e9;
-  --border-strong: #cbd2d8;
-  --text: #0e1316;
-  --text-muted: #525d67;
-  --text-subtle: #7a858f;
-  --accent: #0d9784;
-  --accent-strong: #0a7f6f;
-  --accent-fg: #ffffff;
-  --accent-soft: rgb(13 151 132 / 0.1);
-  --danger: #dc2626;
-  --danger-soft: rgb(220 38 38 / 0.08);
-  --overlay: rgb(15 20 25 / 0.35);
-  --shadow: 0 1px 2px rgb(15 20 25 / 0.05);
-  --shadow-lg: 0 24px 64px -16px rgb(15 20 25 / 0.25), 0 0 0 1px var(--border);
-
-  --tone-teal-fg: #0b7d6d;  --tone-teal-bg: rgb(13 151 132 / 0.1);
-  --tone-blue-fg: #1d5fc4;  --tone-blue-bg: rgb(37 99 235 / 0.08);
-  --tone-violet-fg: #6d3fd6; --tone-violet-bg: rgb(109 63 214 / 0.08);
-  --tone-amber-fg: #9a5b00; --tone-amber-bg: rgb(217 119 6 / 0.1);
-  --tone-red-fg: #c42020;   --tone-red-bg: rgb(220 38 38 / 0.08);
-  --tone-green-fg: #137a3e; --tone-green-bg: rgb(22 163 74 / 0.09);
-  --tone-slate-fg: #4f5b66; --tone-slate-bg: rgb(79 91 102 / 0.08);
-  color-scheme: light;
-}
-
 @theme inline {
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
+  --color-page: var(--bg-page);
+  --color-sidebar: var(--bg-sidebar);
+  --color-card: var(--bg-card);
+  --color-input: var(--bg-input);
+  --color-hover: var(--bg-hover);
+  --color-selected: var(--bg-selected);
+  --color-bubble: var(--bg-bubble);
+
+  --color-line: var(--border);
+  --color-row: var(--border-row);
+  --color-divider: var(--border-sidebar);
+  --color-dash: var(--border-dashed);
+
+  --color-strong: var(--text-strong);
   --color-fg: var(--text);
+  --color-body: var(--text-body);
+  --color-soft: var(--text-soft);
+  --color-secondary: var(--text-secondary);
   --color-muted: var(--text-muted);
-  --color-subtle: var(--text-subtle);
+  --color-faint: var(--text-faint);
+
   --color-accent: var(--accent);
-  --color-accent-strong: var(--accent-strong);
-  --color-accent-fg: var(--accent-fg);
-  --color-accent-soft: var(--accent-soft);
+  --color-accent-on: var(--accent-on);
+  --color-accent-light: var(--accent-light);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-tint-text: var(--accent-tint-text);
+  --color-decision: var(--decision-bg);
+  --color-decision-line: var(--decision-border);
+  --color-decision-divider: var(--decision-divider);
+  --color-decision-meta: var(--decision-meta);
+
   --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-danger-line: var(--danger-border);
+  --color-danger-outline: var(--danger-outline);
+
+  --color-warning: var(--warning);
+  --color-warning-strong: var(--warning-strong);
+  --color-warning-tint: var(--warning-tint);
+  --color-warning-bg: var(--warning-banner-bg);
+  --color-warning-line: var(--warning-banner-border);
+
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --shadow-card: var(--shadow);
-  --shadow-pop: var(--shadow-lg);
 }
 
-html,
-body {
-  background: var(--bg);
-  color: var(--text);
+/* Base styles live in the base layer so Tailwind utilities can override them. */
+@layer base {
+  html,
+  body {
+    background: var(--bg-page);
+    color: var(--text);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+
+  ::selection {
+    background: var(--accent-tint);
+    color: var(--accent-tint-text);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-dashed) transparent;
+  }
 }
 
-body {
-  font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01";
+/* Group labels: 11–12px uppercase with 0.06em tracking. */
+.label-caps {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-::selection {
-  background: var(--accent-soft);
-  color: var(--text);
+.avatar-teal { background: var(--avatar-teal-bg); color: var(--avatar-teal-fg); }
+.avatar-violet { background: var(--avatar-violet-bg); color: var(--avatar-violet-fg); }
+.avatar-amber { background: var(--avatar-amber-bg); color: var(--avatar-amber-fg); }
+.avatar-blue { background: var(--avatar-blue-bg); color: var(--avatar-blue-fg); }
+
+/* Hover-revealed row actions stay visible on touch screens. */
+.reveal { opacity: 0; }
+.group:hover .reveal,
+.group:focus-within .reveal { opacity: 1; }
+@media (hover: none) {
+  .reveal { opacity: 1; }
 }
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-.tone-teal { color: var(--tone-teal-fg); background: var(--tone-teal-bg); }
-.tone-blue { color: var(--tone-blue-fg); background: var(--tone-blue-bg); }
-.tone-violet { color: var(--tone-violet-fg); background: var(--tone-violet-bg); }
-.tone-amber { color: var(--tone-amber-fg); background: var(--tone-amber-bg); }
-.tone-red { color: var(--tone-red-fg); background: var(--tone-red-bg); }
-.tone-green { color: var(--tone-green-fg); background: var(--tone-green-bg); }
-.tone-slate { color: var(--tone-slate-fg); background: var(--tone-slate-bg); }
-
-.dot-teal { background: var(--tone-teal-fg); }
-.dot-blue { background: var(--tone-blue-fg); }
-.dot-violet { background: var(--tone-violet-fg); }
-.dot-amber { background: var(--tone-amber-fg); }
-.dot-red { background: var(--tone-red-fg); }
-.dot-green { background: var(--tone-green-fg); }
-.dot-slate { background: var(--tone-slate-fg); }
 
 @keyframes mk-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mk-pop-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
-@keyframes mk-slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes mk-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes mk-slide-in { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 .animate-fade-in { animation: mk-fade-in 140ms ease-out; }
 .animate-pop-in { animation: mk-pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .animate-slide-in { animation: mk-slide-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-.skeleton {
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
-  background-size: 400% 100%;
-  animation: mk-shimmer 1.4s ease infinite;
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }

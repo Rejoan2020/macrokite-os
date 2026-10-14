@@ -1,0 +1,93 @@
+/* Macrokite OS design tokens (dark theme) */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap");
+
+:root {
+  /* Fonts */
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  /* Surfaces */
+  --bg-page: #0b0c0e;
+  --bg-sidebar: #0e1012;
+  --bg-card: #121417;
+  --bg-input: #0e1012;
+  --bg-hover: #1a1d21;
+  --bg-selected: #1f2226;
+  --bg-bubble: #17191d;
+
+  /* Borders */
+  --border: #24272c;
+  --border-row: #1c1f23;
+  --border-sidebar: #1f2226;
+  --border-dashed: #2a2e34;
+
+  /* Text */
+  --text-strong: #f2f3f5;
+  --text: #e7e8ea;
+  --text-body: #d5d7db;
+  --text-secondary: #a7abb3;
+  --text-muted: #8a8f98;
+  --text-faint: #6f747c;
+
+  /* Accent (teal) */
+  --accent: #3fe0b5;
+  --accent-on: #062a20;          /* text on accent */
+  --accent-light: #8af0d3;
+  --accent-tint: #0f2e27;        /* pills, my chat bubbles */
+  --accent-tint-text: #d9fbf0;
+  --decision-bg: #0d1f1b;
+  --decision-border: #1f4a3f;
+  --decision-divider: #173a32;
+
+  /* Danger (overdue, past deadline) */
+  --danger: #ff8f7a;
+  --danger-border: #4a2a25;
+  --danger-outline: #3a2420;
+
+  /* Warning (on hold, pending, open items banner) */
+  --warning: #ffd7a1;
+  --warning-strong: #ffc98a;
+  --warning-tint: #33260f;
+  --warning-banner-bg: #17140d;
+  --warning-banner-border: #3d3218;
+
+  /* Phase bar */
+  --phase-done: var(--accent);
+  --phase-current: var(--accent-light);
+  --phase-todo: #24272c;
+  --phase-done-hold: #5a5f66;
+  --phase-current-hold: #8a8f98;
+
+  /* Avatars (bg / text) */
+  --avatar-teal-bg: #1b3a32;   --avatar-teal-fg: #8af0d3;
+  --avatar-violet-bg: #2b2442; --avatar-violet-fg: #c9bfff;
+  --avatar-amber-bg: #3a2a1a;  --avatar-amber-fg: #ffc98a;
+  --avatar-blue-bg: #1f2e3d;   --avatar-blue-fg: #a9cff5;
+
+  /* Radius */
+  --radius-control: 8px;
+  --radius-group: 10px;
+  --radius-card: 12px;
+  --radius-pill: 10px;
+
+  /* Sizes */
+  --hit: 44px;
+  --sidebar-min: 220px;
+  --sidebar-max: 260px;
+
+  /* Type scale */
+  --text-title: 600 28px/1.2 var(--font-sans);
+  --text-section: 600 14px/1.4 var(--font-sans);
+  --text-base: 400 14px/1.5 var(--font-sans);
+  --text-meta: 400 12px/1.4 var(--font-sans);
+}
+
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--text);
+  font: var(--text-base);
+}
+a { color: var(--accent); }
+a:hover { color: var(--accent-light); }
+input[type="checkbox"] { accent-color: var(--accent); }

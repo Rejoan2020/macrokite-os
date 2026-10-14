@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meetings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Overview</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">Meetings</a>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="Messages.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Messages<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="Team.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="Settings.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 32px 64px">
+<div style="max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 26px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Meetings</h1>
+<p style="margin: 0; color: #8a8f98">2 today · 3 this week · <span style="color: #ffc98a">4 open action items</span></p>
+</div>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #3fe0b5; color: #062a20; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">+ New meeting</button>
+</header>
+
+<section aria-labelledby="m-upcoming" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="m-upcoming" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3">Upcoming</h2>
+
+<a href="Meeting.dc.html" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 16px 18px; border: 1px solid #1f4a3f; border-radius: 12px; background: #121417; color: #e7e8ea; text-decoration: none">
+<div style="flex: none; width: 64px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #3fe0b5">Today</span><span style="font-family: 'Geist Mono', monospace; font-size: 15px">3:00 PM</span></div>
+<div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 600; font-size: 15px">Jajabor weekly sync</span>
+<span style="font-size: 13px; color: #8a8f98">Jajabor · 4 agenda items · 2 open action items to review</span>
+</div>
+<div aria-label="Attendees: Alex, Sara, Tanvir" style="display: flex">
+<span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: #1b3a32; color: #8af0d3; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid #121417">AM</span>
+<span aria-hidden="true" style="width: 28px; height: 28px; margin-left: -8px; border-radius: 50%; background: #2b2442; color: #c9bfff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid #121417">SR</span>
+<span aria-hidden="true" style="width: 28px; height: 28px; margin-left: -8px; border-radius: 50%; background: #3a2a1a; color: #ffc98a; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid #121417">TK</span>
+</div>
+</a>
+
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 16px 18px; border: 1px solid #24272c; border-radius: 12px; background: #121417; color: #e7e8ea; text-decoration: none">
+<div style="flex: none; width: 64px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #3fe0b5">Today</span><span style="font-family: 'Geist Mono', monospace; font-size: 15px">5:30 PM</span></div>
+<div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 600; font-size: 15px">Fleet Tracker phase review</span>
+<span style="font-size: 13px; color: #8a8f98">Fleet Tracker MVP · 2 agenda items</span>
+</div>
+<div aria-label="Attendees: Alex, Sara" style="display: flex">
+<span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: #1b3a32; color: #8af0d3; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid #121417">AM</span>
+<span aria-hidden="true" style="width: 28px; height: 28px; margin-left: -8px; border-radius: 50%; background: #2b2442; color: #c9bfff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid #121417">SR</span>
+</div>
+</a>
+
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 16px 18px; border: 1px solid #24272c; border-radius: 12px; background: #121417; color: #e7e8ea; text-decoration: none">
+<div style="flex: none; width: 64px; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #8a8f98">Thu</span><span style="font-family: 'Geist Mono', monospace; font-size: 15px">3:00 PM</span></div>
+<div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<span style="font-weight: 600; font-size: 15px">Team weekly</span>
+<span style="font-size: 13px; color: #8a8f98">Internal · No agenda yet</span>
+</div>
+<div aria-label="Attendees: whole team" style="font-size: 12px; color: #8a8f98">Everyone</div>
+</a>
+</section>
+
+<section aria-labelledby="m-past" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="m-past" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3">Past</h2>
+<div style="border: 1px solid #24272c; border-radius: 12px; background: #121417; overflow: hidden">
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 14px 18px; border-bottom: 1px solid #1c1f23; color: #e7e8ea; text-decoration: none">
+<span style="flex: none; width: 64px; font-family: 'Geist Mono', monospace; font-size: 13px; color: #8a8f98">Oct 12</span>
+<span style="flex: 1 1 220px; min-width: 0; font-weight: 500">Team meeting</span>
+<span style="font-size: 13px; color: #8a8f98">Internal · 2 decisions · 3 action items</span>
+</a>
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 14px 18px; border-bottom: 1px solid #1c1f23; color: #e7e8ea; text-decoration: none">
+<span style="flex: none; width: 64px; font-family: 'Geist Mono', monospace; font-size: 13px; color: #8a8f98">Oct 7</span>
+<span style="flex: 1 1 220px; min-width: 0; font-weight: 500">Jajabor weekly sync</span>
+<span style="font-size: 13px; color: #8a8f98">Jajabor · 1 decision · 2 action items</span>
+</a>
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px; padding: 14px 18px; color: #e7e8ea; text-decoration: none">
+<span style="flex: none; width: 64px; font-family: 'Geist Mono', monospace; font-size: 13px; color: #8a8f98">Oct 5</span>
+<span style="flex: 1 1 220px; min-width: 0; font-weight: 500">Billing flow kickoff</span>
+<span style="font-size: 13px; color: #8a8f98">Subscription Billing Flow · 3 decisions · 4 action items</span>
+</a>
+</div>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

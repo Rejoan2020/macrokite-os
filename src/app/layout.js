@@ -9,23 +9,17 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata = {
-  title: { default: "MacroKite OS", template: "%s · MacroKite OS" },
-  description: "Unified workspace for agencies: clients, projects, tasks and conversations in one place.",
+  title: { default: "Macrokite OS", template: "%s · Macrokite OS" },
+  description: "The Macrokite team hub: projects, meetings, decisions and conversation in one place.",
 };
 
 export const viewport = {
-  themeColor: "#090B0D",
+  themeColor: "#0b0c0e",
 };
-
-// Applies the saved theme before first paint to avoid a flash.
-const themeScript = `try{var t=localStorage.getItem("macrokite-os:theme");if(t==="light"||(t==="system"&&matchMedia("(prefers-color-scheme: light)").matches))document.documentElement.dataset.theme="light"}catch(e){}`;
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
       <body className="min-h-dvh">
         <ToastProvider>
           <WorkspaceProvider>

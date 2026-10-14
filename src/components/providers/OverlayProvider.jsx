@@ -3,58 +3,56 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "./WorkspaceProvider";
-import { ClientFormDialog, ProjectFormDialog, TaskDialog } from "@/components/forms/EntityForms";
-import { ThreadDialog } from "@/components/forms/ThreadForm";
+import { InviteDialog, MeetingDialog, ProjectDialog, TaskDialog } from "@/components/forms/Dialogs";
 
-// One place that owns create/edit dialogs so any page or quick action can open them.
+// One place that owns create/edit dialogs so any page can open them.
 const OverlayContext = createContext(null);
 
 export function OverlayProvider({ children }) {
   const router = useRouter();
   const { lookup } = useWorkspace();
-  const [overlay, setOverlay] = useState(null); // { kind, record?, defaults? }
+  const [overlay, setOverlay] = useState(null); // { kind, id?, defaults? }
 
   const close = useCallback(() => setOverlay(null), []);
 
   const api = useMemo(
     () => ({
-      newClient: () => setOverlay({ kind: "client" }),
-      editClient: (client) => setOverlay({ kind: "client", record: client }),
-      newProject: (defaults) => setOverlay({ kind: "project", defaults }),
-      editProject: (project) => setOverlay({ kind: "project", record: project }),
+      newProject: () => setOverlay({ kind: "project" }),
+      editProject: (id) => setOverlay({ kind: "project", id }),
       newTask: (defaults) => setOverlay({ kind: "task", defaults }),
-      openTask: (taskId) => setOverlay({ kind: "task", id: taskId }),
-      newThread: (defaults) => setOverlay({ kind: "thread", defaults }),
+      editTask: (id) => setOverlay({ kind: "task", id }),
+      newMeeting: (defaults) => setOverlay({ kind: "meeting", defaults }),
+      editMeeting: (id) => setOverlay({ kind: "meeting", id }),
+      invite: () => setOverlay({ kind: "invite" }),
     }),
     []
   );
 
   // Edit dialogs read the live record so they never show stale data.
-  const task = overlay?.kind === "task" && overlay.id ? lookup?.tasks[overlay.id] : undefined;
+  const record = (collection) => (overlay?.id ? lookup?.[collection][overlay.id] : undefined);
+  const isOpen = (kind, collection) => overlay?.kind === kind && (!overlay.id || !!record(collection));
 
   return (
     <OverlayContext.Provider value={api}>
       {children}
-      <ClientFormDialog
-        open={overlay?.kind === "client"}
-        client={overlay?.record}
+      <ProjectDialog
+        open={isOpen("project", "projects")}
+        project={record("projects")}
         onClose={close}
-        onSaved={(client) => !overlay?.record && router.push(`/clients/${client._id}`)}
+        onSaved={(project) => !overlay?.id && router.push(`/projects/${project._id}`)}
       />
-      <ProjectFormDialog
-        open={overlay?.kind === "project"}
-        project={overlay?.record}
+      <TaskDialog open={isOpen("task", "tasks")} task={record("tasks")} defaults={overlay?.defaults} onClose={close} />
+      <MeetingDialog
+        open={isOpen("meeting", "meetings")}
+        meeting={record("meetings")}
         defaults={overlay?.defaults}
         onClose={close}
-        onSaved={(project) => !overlay?.record && router.push(`/projects/${project._id}`)}
+        onSaved={(meeting) => {
+          if (!meeting) router.push("/meetings");
+          else if (!overlay?.id) router.push(`/meetings/${meeting._id}`);
+        }}
       />
-      <TaskDialog open={overlay?.kind === "task" && (!overlay.id || !!task)} task={task} defaults={overlay?.defaults} onClose={close} />
-      <ThreadDialog
-        open={overlay?.kind === "thread"}
-        defaults={overlay?.defaults}
-        onClose={close}
-        onSaved={(conversation) => router.push(`/inbox?thread=${conversation._id}`)}
-      />
+      <InviteDialog open={overlay?.kind === "invite"} onClose={close} />
     </OverlayContext.Provider>
   );
 }

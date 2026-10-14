@@ -41,14 +41,14 @@ export function ToastProvider({ children }) {
             <div
               key={t.id}
               role={t.type === "error" ? "alert" : "status"}
-              className="animate-pop-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-surface-2 px-3.5 py-3 shadow-pop"
+              className="animate-pop-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-[10px] border border-line bg-card px-3.5 py-3 shadow-2xl shadow-black/50"
             >
               <Icon className={cx("mt-0.5 size-4 shrink-0", TONES[t.type])} aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-medium text-fg">{t.title}</p>
+                <p className="text-[13px] font-medium text-strong">{t.title}</p>
                 {t.description && <p className="mt-0.5 text-xs text-muted">{t.description}</p>}
               </div>
-              <button type="button" onClick={() => dismiss(t.id)} aria-label="Dismiss notification" className="rounded p-0.5 text-subtle hover:text-fg">
+              <button type="button" onClick={() => dismiss(t.id)} aria-label="Dismiss notification" className="rounded p-0.5 text-faint hover:text-fg">
                 <X className="size-3.5" />
               </button>
             </div>

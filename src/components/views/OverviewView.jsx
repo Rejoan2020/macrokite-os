@@ -1,215 +1,187 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Activity,
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  CalendarClock,
-  CheckSquare,
-  CircleAlert,
-  FolderKanban,
-  Inbox,
-  ListChecks,
-  MessageSquare,
-  Plus,
-} from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
-import { useOverlays } from "@/components/providers/OverlayProvider";
-import { Avatar, Button, Card, CardHeader, cx, EmptyState, ProgressBar, Stat, StatusBadge } from "@/components/ui/primitives";
-import { ActivityFeed } from "@/components/shared/Activity";
-import { TASK_STATUSES, TASK_STATUS_META } from "@/lib/constants";
-import { conversationsSorted, dashboardMetrics, isUnread, projectProgress, todayISO } from "@/lib/selectors";
-import { dueLabel, formatDate, formatRelative, pluralize } from "@/lib/format";
-
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-}
+import { TaskRow } from "@/components/tasks/TaskRow";
+import { conversationMessages } from "@/components/chat/Chat";
+import { CountBadge, cx, OnHoldPill, Page, PageHeader, Panel, PhaseBar, Summary, TextLink } from "@/components/ui/primitives";
+import { usePersistentState } from "@/lib/client/usePersistentState";
+import { phaseIndex, phaseLabel } from "@/lib/constants";
+import { firstName, formatLongDate, formatShortDate, formatTime, greeting, pluralize, todayISO } from "@/lib/format";
+import { decisionLog, isOpenTask, isOverdue, isPastDeadline, sortByDue, stillOpenFromLast } from "@/lib/selectors";
 
 export function OverviewView() {
-  const { data, lookup, currentUser, currentUserId, preferences } = useWorkspace();
-  const overlays = useOverlays();
+  const { data, currentUser, currentUserId, unread, chats, lookup } = useWorkspace();
   const today = todayISO();
-  const m = dashboardMetrics(data, { today, dueSoonDays: preferences.dueSoonDays });
-  const totalTasks = data.tasks.length;
-  const unread = conversationsSorted(data.conversations).filter((c) => isUnread(c, currentUserId));
+
+  const myOpen = sortByDue(data.tasks.filter((t) => t.assigneeId === currentUserId && isOpenTask(t)));
+  const overdue = myOpen.filter((t) => isOverdue(t, today)).length;
+  const myProjects = data.projects
+    .filter((p) => !p.archived && p.memberIds.includes(currentUserId))
+    .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999") || a.name.localeCompare(b.name));
+  const myProjectIds = new Set(myProjects.map((p) => p._id));
+  const meetingsToday = data.meetings
+    .filter((m) => todayISO(new Date(m.startsAt)) === today && (m.attendeeIds.includes(currentUserId) || myProjectIds.has(m.projectId)))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const decisions = decisionLog(data.meetings.filter((m) => myProjectIds.has(m.projectId))).slice(0, 3);
+
+  const unreadGroups = {
+    projects: myProjects
+      .map((p) => ({ key: p._id, href: `/projects/${p._id}?tab=chat`, label: `# ${p.name}`, ...unread[chats.projects[p._id]?._id] }))
+      .filter((g) => g.count),
+    general: chats.general && unread[chats.general._id] ? [{ key: "general", href: "/general", label: "# General", ...unread[chats.general._id] }] : [],
+    messages: Object.entries(chats.dms)
+      .filter(([, c]) => unread[c._id])
+      .map(([userId, c]) => ({
+        key: c._id,
+        href: `/messages/${userId}`,
+        label: lookup.users[userId]?.name ?? "Former member",
+        preview: conversationMessages(data, c._id).at(-1)?.body,
+        ...unread[c._id],
+      })),
+  };
+  const unreadTotal = Object.values(unreadGroups).flat().reduce((n, g) => n + g.count, 0);
 
   return (
-    <>
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs text-subtle">{formatDate(today, preferences.dateFormat)}</p>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-[22px]">
-            {greeting()}, {currentUser?.name.split(" ")[0]}
-          </h1>
-          <p className="mt-1 text-[13px] text-muted">
-            {m.overdueTasks.length
-              ? `${pluralize(m.overdueTasks.length, "task")} overdue and ${pluralize(m.upcoming.length, "deadline")} in the next ${preferences.dueSoonDays} days.`
-              : `Nothing overdue. ${pluralize(m.upcoming.length, "deadline")} in the next ${preferences.dueSoonDays} days.`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button icon={Building2} onClick={overlays.newClient}>New client</Button>
-          <Button icon={FolderKanban} onClick={() => overlays.newProject()}>New project</Button>
-          <Button variant="primary" icon={Plus} onClick={() => overlays.newTask()}>Add task</Button>
-        </div>
-      </header>
+    <Page>
+      <PageHeader
+        eyebrow={formatLongDate(today)}
+        title={`${greeting()}, ${firstName(currentUser.name)}`}
+        summary={
+          <Summary
+            parts={[
+              overdue > 0 && <span className="text-danger">{pluralize(overdue, "task")} overdue</span>,
+              meetingsToday.length > 0 && `${pluralize(meetingsToday.length, "meeting")} today`,
+              unreadTotal > 0 && `${unreadTotal} unread`,
+              !overdue && !meetingsToday.length && !unreadTotal && "Nothing urgent. Enjoy the quiet.",
+            ]}
+          />
+        }
+      />
 
-      <section aria-label="Key metrics" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Active projects" value={m.activeProjects} icon={FolderKanban} hint={`${m.plannedProjects} in planning`} href="/projects?status=in_progress" />
-        <Stat label="Total clients" value={m.totalClients} icon={Building2} tone="blue" hint={`${m.activeClients} active · ${pluralize(m.leads, "lead")}`} href="/clients" />
-        <Stat label="Open tasks" value={m.openTasks} icon={CheckSquare} tone="violet" hint={`${totalTasks - m.openTasks} of ${totalTasks} completed`} href="/tasks?assignee=all" />
-        <Stat
-          label="Overdue tasks"
-          value={m.overdueTasks.length}
-          icon={CircleAlert}
-          tone={m.overdueTasks.length ? "red" : "green"}
-          hint={m.overdueTasks.length ? "Need a new date or owner" : "All on schedule"}
-          href="/tasks?assignee=all&due=overdue"
-        />
-      </section>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] gap-4">
+        {myOpen.length > 0 && (
+          <Panel id="o-tasks" title="My tasks" action={<TextLink href="/tasks">All {myOpen.length}</TextLink>}>
+            {myOpen.slice(0, 3).map((task) => (
+              <TaskRow key={task._id} task={task} overdueLabel className="py-3" />
+            ))}
+          </Panel>
+        )}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="flex flex-col gap-6 xl:col-span-2">
-          <Card>
-            <CardHeader title="Projects needing attention" icon={AlertTriangle} description="Past or near deadlines, overdue work and unassigned urgent tasks." />
-            {m.attention.length ? (
-              <ul className="divide-y divide-border">
-                {m.attention.map(({ project, reasons }) => {
-                  const progress = projectProgress(project._id, data.tasks);
-                  return (
-                    <li key={project._id}>
-                      <Link href={`/projects/${project._id}`} className="flex flex-col gap-2 px-4 py-3 hover:bg-surface-2/60 sm:flex-row sm:items-center sm:gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-medium text-fg">{project.name}</p>
-                          <p className="truncate text-xs text-subtle">{project.clientId ? lookup.clients[project.clientId]?.company : "Internal"}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {reasons.map((r) => (
-                            <span key={r} className="tone-amber rounded px-1.5 py-0.5 text-[11px]">
-                              {r}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex w-full items-center gap-2 sm:w-32">
-                          <ProgressBar value={progress.percent} label={`${project.name} progress`} />
-                          <span className="w-8 text-right text-[11px] tabular-nums text-muted">{progress.percent}%</span>
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <EmptyState icon={FolderKanban} title="Everything is on track" description="No projects are at risk right now." compact />
-            )}
-          </Card>
+        {unreadTotal > 0 && <UnreadPanel groups={unreadGroups} total={unreadTotal} userId={currentUserId} />}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader title="Tasks by status" icon={ListChecks} action={<Link href="/tasks?assignee=all" className="text-xs text-muted hover:text-fg">View all</Link>} />
-              <div className="p-4">
-                {totalTasks ? (
-                  <>
-                    <div className="flex h-2 overflow-hidden rounded-full bg-surface-3" aria-hidden>
-                      {TASK_STATUSES.map((s) =>
-                        m.byStatus[s].length ? (
-                          <div key={s} className={`dot-${TASK_STATUS_META[s].tone}`} style={{ width: `${(m.byStatus[s].length / totalTasks) * 100}%` }} />
-                        ) : null
-                      )}
-                    </div>
-                    <ul className="mt-4 flex flex-col gap-1">
-                      {TASK_STATUSES.map((s) => (
-                        <li key={s}>
-                          <Link href={`/tasks?assignee=all&status=${s}`} className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] hover:bg-surface-2">
-                            <span className={cx(`dot-${TASK_STATUS_META[s].tone}`, "size-2 rounded-full")} aria-hidden />
-                            <span className="text-muted">{TASK_STATUS_META[s].label}</span>
-                            <span className="ml-auto font-medium tabular-nums text-fg">{m.byStatus[s].length}</span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <EmptyState icon={CheckSquare} title="No tasks yet" action={<Button size="sm" variant="primary" icon={Plus} onClick={() => overlays.newTask()}>Add task</Button>} compact />
-                )}
-              </div>
-            </Card>
+        {meetingsToday.length > 0 && (
+          <Panel id="o-meet" title="Meetings today" action={<TextLink href="/meetings">This week</TextLink>}>
+            {meetingsToday.slice(0, 5).map((m, i) => {
+              const open = stillOpenFromLast(m, data).length;
+              const next = meetingsToday.find((x) => !x.endedAt);
+              const detail = [m.agenda.length ? pluralize(m.agenda.length, "agenda topic") : "No agenda yet", open && `${pluralize(open, "open item")} from last time`, m.endedAt && "ended"];
+              return (
+                <Link key={m._id} href={`/meetings/${m._id}`} className={cx("flex items-center gap-3.5 px-[18px] py-3 hover:bg-hover/50", i < meetingsToday.length - 1 && "border-b border-row")}>
+                  <span className={cx("w-16 shrink-0 font-mono text-[13px]", m === next ? "text-accent" : "text-secondary")}>{formatTime(m.startsAt)}</span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span>{m.title}</span>
+                    <span className="text-xs text-muted">{detail.filter(Boolean).join(" · ")}</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </Panel>
+        )}
 
-            <Card>
-              <CardHeader title="Upcoming deadlines" icon={CalendarClock} description={`Next ${preferences.dueSoonDays} days`} />
-              {m.upcoming.length ? (
-                <ul className="divide-y divide-border">
-                  {m.upcoming.slice(0, 7).map(({ kind, item, date }) => (
-                    <li key={`${kind}-${item._id}`}>
-                      {kind === "task" ? (
-                        <button type="button" onClick={() => overlays.openTask(item._id)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-2/60">
-                          <CheckSquare className="size-3.5 shrink-0 text-subtle" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate text-[13px] text-fg">{item.title}</span>
-                          <Avatar user={lookup.users[item.assigneeId]} size="xs" />
-                          <span className="w-20 shrink-0 text-right text-[11px] text-muted">{dueLabel(date, today).replace("Due ", "")}</span>
-                        </button>
-                      ) : (
-                        <Link href={`/projects/${item._id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2/60">
-                          <FolderKanban className="size-3.5 shrink-0 text-accent" aria-hidden />
-                          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-fg">{item.name} deadline</span>
-                          <span className="w-20 shrink-0 text-right text-[11px] text-muted">{dueLabel(date, today).replace("Due ", "")}</span>
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState icon={CalendarClock} title="No upcoming deadlines" description="Nothing is due in this window." compact />
-              )}
-            </Card>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader
-              title="Unread conversations"
-              icon={Inbox}
-              action={<Link href="/inbox" className="text-xs text-muted hover:text-fg">Open inbox</Link>}
-            />
-            {unread.length ? (
-              <ul className="divide-y divide-border">
-                {unread.slice(0, 4).map((c) => (
-                  <li key={c._id}>
-                    <Link href={`/inbox?thread=${c._id}`} className="flex items-start gap-3 px-4 py-2.5 hover:bg-surface-2/60">
-                      <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-fg">{c.subject}</p>
-                        <p className="truncate text-[11px] text-subtle">
-                          {c.clientId ? lookup.clients[c.clientId]?.company : "Team"} · {formatRelative(c.lastMessageAt)}
-                        </p>
-                      </div>
-                      <StatusBadge kind="visibility" value={c.visibility} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={Inbox} title="You’re all caught up" compact />
-            )}
-          </Card>
-
-          <Card>
-            <CardHeader title="Recent activity" icon={Activity} />
-            <div className="py-1">
-              <ActivityFeed limit={9} />
-            </div>
-          </Card>
-
-          <Link href="/projects" className="flex items-center justify-between rounded-xl border border-dashed border-border px-4 py-3 text-[13px] text-muted hover:border-border-strong hover:text-fg">
-            Browse all projects
-            <ArrowRight className="size-4" aria-hidden />
-          </Link>
-        </div>
+        {decisions.length > 0 && (
+          <Panel id="o-dec" title="Recent decisions">
+            {decisions.map((d, i) => (
+              <Link key={d._id} href={`/meetings/${d.meeting._id}`} className={cx("flex gap-3 px-[18px] py-3 hover:bg-hover/50", i < decisions.length - 1 && "border-b border-row")}>
+                <span aria-hidden className="text-accent">
+                  ✓
+                </span>
+                <span className="flex flex-1 flex-col gap-0.5">
+                  <span>{d.text}</span>
+                  <span className="text-xs text-muted">
+                    {lookup.projects[d.meeting.projectId]?.name} · {formatShortDate(d.createdAt.slice(0, 10))}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </Panel>
+        )}
       </div>
-    </>
+
+      {myProjects.length > 0 && (
+        <Panel id="o-proj" title="My projects" action={<TextLink href="/projects">All projects</TextLink>}>
+          {myProjects.slice(0, 5).map((p) => {
+            const late = isPastDeadline(p, today);
+            return (
+              <Link
+                key={p._id}
+                href={`/projects/${p._id}`}
+                className="grid grid-cols-[minmax(0,1fr)_80px] items-center gap-x-[18px] gap-y-2 border-b border-row px-[18px] py-3.5 last:border-b-0 hover:bg-hover/50 sm:grid-cols-[minmax(150px,1fr)_minmax(0,2fr)_90px]"
+              >
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="font-medium">{p.name}</span>
+                  {p.onHold && <OnHoldPill />}
+                </span>
+                <span className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1.5 sm:col-span-1 sm:row-start-auto">
+                  <span className="text-xs text-secondary">
+                    {phaseLabel(p.phase)} · <span className="font-mono">{phaseIndex(p.phase) + 1}/7</span>
+                  </span>
+                  <PhaseBar phase={p.phase} onHold={p.onHold} />
+                </span>
+                <span className={cx("justify-self-end text-[13px]", late ? "font-medium text-danger" : "text-secondary")}>{p.deadline ? formatShortDate(p.deadline) : "—"}</span>
+              </Link>
+            );
+          })}
+        </Panel>
+      )}
+    </Page>
+  );
+}
+
+const GROUPS = [
+  { key: "projects", label: "Projects" },
+  { key: "general", label: "General" },
+  { key: "messages", label: "Messages" },
+];
+
+function UnreadPanel({ groups, total, userId }) {
+  const [collapsed, setCollapsed] = usePersistentState(`overview-unread:${userId}`, {});
+  const shown = GROUPS.filter((g) => groups[g.key].length);
+  return (
+    <Panel id="o-unread" title="Unread" action={<span className="text-[13px] text-muted">{pluralize(total, "message")}</span>}>
+      <div className="pb-1.5">
+        {shown.map((group, i) => {
+          const open = !collapsed[group.key];
+          const items = groups[group.key];
+          const count = items.reduce((n, g) => n + g.count, 0);
+          return (
+            <div key={group.key}>
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setCollapsed((c) => ({ ...c, [group.key]: open }))}
+                className={cx("flex min-h-10 w-full items-center gap-2 px-[18px] py-2 text-left text-[11px] font-semibold tracking-[0.06em] text-muted uppercase", i > 0 && "border-t border-row")}
+              >
+                <span aria-hidden className={cx("inline-block w-2.5 transition-transform", !open && "-rotate-90")}>
+                  ▾
+                </span>
+                <span className="flex-1">{group.label}</span>
+                <span className="font-medium tracking-normal text-faint normal-case">{count}</span>
+              </button>
+              {open &&
+                items.map((item) => (
+                  <Link key={item.key} href={item.href} className="flex items-center justify-between gap-2.5 py-2 pr-[18px] pl-9 hover:bg-hover/50">
+                    <span className="min-w-0 truncate">
+                      {item.label}
+                      {item.mentioned ? <span className="text-muted"> · you were mentioned</span> : item.preview ? <span className="text-muted"> · {item.preview}</span> : null}
+                    </span>
+                    <CountBadge count={item.count} label={`${item.count} unread`} />
+                  </Link>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }
