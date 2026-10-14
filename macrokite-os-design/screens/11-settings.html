@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+input[type=checkbox]{accent-color:#3fe0b5}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Overview</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Meetings</a>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="Messages.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Messages<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="Team.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 32px 64px">
+<div style="max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Settings</h1>
+
+<section aria-labelledby="s-profile" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; padding: 22px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 id="s-profile" style="margin: 0; font-size: 16px; font-weight: 600">Profile</h2><p style="margin: 0; font-size: 13px; color: #8a8f98">How you appear to the team</p></div>
+<div style="display: flex; align-items: center; gap: 14px">
+<div aria-hidden="true" style="width: 52px; height: 52px; border-radius: 50%; background: #1b3a32; color: #8af0d3; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">AM</div>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #24272c; border-radius: 8px; background: transparent; color: #e7e8ea; font: 500 13px Geist, system-ui, sans-serif; cursor: pointer">Change photo</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #a7abb3">Name
+<input type="text" value="Alex Morgan" style="height: 44px; padding: 0 12px; border: 1px solid #24272c; border-radius: 8px; background: #0e1012; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif">
+</label>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #a7abb3">Email
+<input type="email" value="[alex@macrokite.com]" readonly style="height: 44px; padding: 0 12px; border: 1px solid #1f2226; border-radius: 8px; background: #0e1012; color: #8a8f98; font: 400 14px Geist, system-ui, sans-serif">
+</label>
+</div>
+</section>
+
+<section aria-labelledby="s-notify" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 id="s-notify" style="margin: 0; font-size: 16px; font-weight: 600">Email notifications</h2><p style="margin: 0; font-size: 13px; color: #8a8f98">In-app notifications are always on</p></div>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; border-top: 1px solid #1c1f23; padding-top: 12px"><span style="display: flex; flex-direction: column; gap: 2px"><span>Someone @mentions me</span><span style="font-size: 12px; color: #8a8f98">In project chats, General or messages</span></span><input type="checkbox" checked style="width: 18px; height: 18px; margin: 0"></label>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; border-top: 1px solid #1c1f23; padding-top: 12px"><span style="display: flex; flex-direction: column; gap: 2px"><span>A task is assigned to me</span><span style="font-size: 12px; color: #8a8f98">Includes action items from meetings</span></span><input type="checkbox" checked style="width: 18px; height: 18px; margin: 0"></label>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; border-top: 1px solid #1c1f23; padding-top: 12px"><span style="display: flex; flex-direction: column; gap: 2px"><span>I'm invited to a meeting</span><span style="font-size: 12px; color: #8a8f98">Plus a reminder before it starts</span></span><input type="checkbox" checked style="width: 18px; height: 18px; margin: 0"></label>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; border-top: 1px solid #1c1f23; padding-top: 12px"><span style="display: flex; flex-direction: column; gap: 2px"><span>New direct message</span><span style="font-size: 12px; color: #8a8f98">Only when I'm away from the app</span></span><input type="checkbox" style="width: 18px; height: 18px; margin: 0"></label>
+</section>
+
+<section aria-labelledby="s-workspace" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px"><h2 id="s-workspace" style="margin: 0; font-size: 16px; font-weight: 600">Workspace</h2><span style="font-size: 11px; font-weight: 500; color: #8af0d3; background: #0f2e27; border-radius: 10px; padding: 2px 8px">Admins only</span></div>
+<label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #a7abb3">Workspace name
+<input type="text" value="Macrokite" style="height: 44px; padding: 0 12px; border: 1px solid #24272c; border-radius: 8px; background: #0e1012; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif">
+</label>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; color: #a7abb3">Lifecycle phases</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Idea</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Planning</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Design</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Build</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Test</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Launch</span>
+<span style="font-size: 12px; padding: 5px 10px; border: 1px solid #24272c; border-radius: 6px; color: #c9ccd1">Maintain</span>
+</div>
+<span style="font-size: 12px; color: #6f747c">Fixed for every project in v1</span>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+<button type="button" style="height: 44px; padding: 0 18px; border: 1px solid #4a2a25; border-radius: 8px; background: transparent; color: #ff8f7a; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">Sign out</button>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #3fe0b5; color: #062a20; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">Save changes</button>
+</div>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":980}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

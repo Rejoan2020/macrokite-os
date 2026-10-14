@@ -1,10 +1,14 @@
-# MacroKite OS
+# Macrokite OS
 
-A unified workspace for small agencies: clients, projects, tasks, and client and internal conversations in one place.
+A minimal internal hub for the Macrokite team: project work, meetings and decisions, and team conversation in one place.
 
-**Organization → Team → Clients → Projects → Tasks → Discussions → Delivery**
+- **The project is the hub.** Tasks, meetings, decisions, chat and notes all belong to a project. Company-wide work goes in the **Internal** project.
+- **Phases are the spine.** Every project moves through seven fixed phases: Idea, Planning, Design, Build, Test, Launch, Maintain.
+- **Capture where it happens.** An action item typed in a meeting is a real task, and a decision typed in a meeting lands in the project's decision log.
 
-> **Status: local MVP, not production-authenticated.** There is no sign-in. Everyone who can reach the app acts as a fixed demo identity. Run it locally or on a private network only.
+The design spec and screen references live in [`macrokite-os-design/`](macrokite-os-design/DESIGN.md).
+
+> **Status: local MVP, not production-authenticated.** There is no sign-in. Everyone who can reach the app acts as one configured identity. Run it locally or on a private network only.
 
 ## Quick start
 
@@ -15,7 +19,7 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-With no configuration the app starts in **demo mode**: a realistic sample workspace is seeded into your browser's `localStorage`. Changes survive refreshes but stay in that browser. You can reset the sample data from **Settings → Data storage & security**.
+With no configuration the app starts in **demo mode**: a sample workspace is seeded into your browser's `localStorage`. Changes survive refreshes but stay in that browser. Reset it from the bottom of **Settings**.
 
 ### Enable MongoDB (database mode)
 
@@ -27,14 +31,16 @@ cp .env.example .env.local
 npm run dev
 ```
 
-When `MONGODB_URI` is set, all reads and writes go through the server route handlers to MongoDB. On first run the `macrokite` workspace is seeded automatically. The sidebar and Settings show which mode is active. If the database is unreachable, the app shows an error with a retry button. It does not quietly fall back to demo data.
+When `MONGODB_URI` is set, all reads and writes go through the server to MongoDB, and the `macrokite` workspace is seeded on first run. Open chats poll for new messages every few seconds. If the database is unreachable, the app shows an error with a retry button; it never quietly falls back to demo data.
+
+A database created by the previous version of the app (clients, inbox) is not migrated. Point `MONGODB_DB` at a new database, or drop the old one.
 
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | Enables database mode. Server-only; never sent to the browser. |
 | `MONGODB_DB` | Optional database name. |
 | `MACROKITE_ORG_SLUG` | Workspace to serve (default `macrokite`, which is seeded if missing). |
-| `MACROKITE_ACTING_USER_EMAIL` | Which member the server acts as (defaults to the workspace owner). |
+| `MACROKITE_ACTING_USER_EMAIL` | Which active member the server acts as (defaults to the first admin). |
 
 ## Scripts
 
@@ -43,61 +49,59 @@ When `MONGODB_URI` is set, all reads and writes go through the server route hand
 | `npm run dev` | Development server |
 | `npm run build` / `npm start` | Production build and server |
 | `npm run lint` | ESLint |
-| `npm test` | Domain-engine checks (validation, org scoping, references, cascades, metrics) |
+| `npm test` | Domain-engine checks (validation, permissions, phases, meetings, mentions, unread state, text parsing) |
 
-## Features
+## Screens
 
-- **Overview**: live metrics (active projects, clients, open and overdue tasks), projects needing attention, upcoming deadlines, tasks by status, unread conversations, and recent activity. Every number is computed from current data.
-- **Clients**: table and card views, search, status filter, create/edit/delete (the delete dialog lists linked records), and a detail page with projects, communication history, notes, and activity.
-- **Projects**: card and table views, filters by status, client and priority, inline status and priority changes, progress calculated from tasks, team, timeline, discussions, and activity.
-- **Tasks**: a Kanban board (Backlog → Done) with drag-and-drop plus a status selector on every card for keyboard and touch users, a list view, a detail/edit drawer, labels, assignees, and due dates. **My Tasks** has assignee, due, status, priority and project filters.
-- **Inbox**: internal and client-facing threads linked to clients and projects, replies, logged client messages, per-user unread state, search, and filters. Messages are stored in the app only and are **never emailed or delivered**.
-- **Team**: a read-only seeded member directory with workload. **Settings**: workspace name and description, preferences (default priority, "due soon" window, date format), profile, theme, storage status, and JSON export.
+| Route | What's there |
+| --- | --- |
+| `/` | Overview: my top tasks, unread (projects, General, messages), meetings today, recent decisions, my projects |
+| `/projects` | Table or cards, search, phase filter tabs plus On hold and Archived |
+| `/projects/[id]?tab=` | Phase card with "Move to next phase", and tabs for Tasks, Chat, Meetings, Decisions and Notes. Put on hold, archive (no delete) |
+| `/meetings`, `/meetings/[id]` | Upcoming and past meetings. A meeting has agenda, notes, decisions and one-line action items (`Task @name fri`) |
+| `/tasks` | My tasks grouped by Overdue, Today, This week, Later and No due date, plus completed this week |
+| `/general` | Team-wide channel. Facebook and Instagram links render as cards, and `@name` mentions notify |
+| `/messages/[userId]` | One-to-one messages, with "Create task from message" |
+| `/team`, `/settings` | Invites, roles and deactivation (admins). Profile, email notification preferences, workspace name |
 
 ## Architecture
 
 ```
 src/
   lib/
-    engine.js        # Pure domain engine: every mutation, validation, org scoping, cascades, activity log
+    engine.js        # Pure domain engine: every mutation, validation, permissions, notifications
     schemas.js       # Zod input schemas (shared by browser and server)
-    selectors.js     # Derived metrics (progress, overdue, attention, dashboard)
-    seed.js          # Fictional interconnected sample data (dates relative to today)
-    client/          # Storage adapters (demo: localStorage; database: fetch → API) + useAction hook
-    server/          # MongoDB connection, Mongoose models, org-scoped repository, route helpers (server-only)
-  app/               # App Router pages + /api route handlers
-  components/        # UI primitives, shell, forms, task board, inbox, page views
+    selectors.js     # Derived data (unread counts, task groups, meeting buckets, decision log)
+    text.js          # @mentions, action-item and day parsing, social link detection
+    seed.js          # Sample data (dates relative to today)
+    client/          # Storage adapters (demo: localStorage; database: fetch → API) and hooks
+    server/          # MongoDB connection, Mongoose models, org-scoped repository (server-only)
+  app/               # App Router pages, plus /api/workspace and /api/actions
+  components/        # UI primitives, shell, dialogs, chat, task rows, page views
 ```
 
-**One engine, two storage modes.** `applyAction(snapshot, action, context)` is a pure function. It validates input, checks that every referenced record (client, project, assignee, members) belongs to the same organization, applies cascades, writes an activity entry, and returns the new snapshot plus a changeset.
+**One engine, two storage modes.** `applyAction(snapshot, action, context)` is a pure function. It validates input, enforces permissions (for example, only admins invite or change roles), checks that referenced records exist in the same organization, creates notifications, and returns the new snapshot plus a changeset.
 
 - Demo mode runs the engine in the browser and saves the snapshot to `localStorage`.
-- Database mode runs the same engine in the route handlers on a snapshot loaded with `orgId` filters, then persists the changeset with `orgId`-scoped `bulkWrite` and `deleteMany`.
+- Database mode runs the same engine on the server against a snapshot loaded with `orgId` filters, then persists the changeset with `orgId`-scoped writes.
 
-Business rules therefore live in exactly one place.
-
-**Tenancy model.** Every business record carries `orgId`. `Organization`, `User`, and `Membership` are separate collections, and users belong to workspaces through memberships. The server resolves the organization and acting user from its own configuration. It **never** takes them from request payloads: any `orgId` in a request body is ignored. This is groundwork for multi-tenancy, not a secure multi-tenant system. That needs real authentication.
+**Data model.** Users (with `role` and `active`), invites, projects (`phase`, `onHold`, `archived`, `isInternal`), tasks (always with a project, phase and assignee), meetings (agenda, notes and decisions embedded), conversations (`project`, `general` or `dm`), messages, read states and notifications. Action items are tasks with `source: "meeting"` and a `meetingId`. The decision log is a query over meeting decisions. See `macrokite-os-design/DESIGN.md` §4.
 
 ### API
 
-| Method | Route | Action |
+| Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/api/workspace` | Storage mode, plus the workspace snapshot in database mode |
-| PATCH | `/api/workspace`, `/api/profile` | Update workspace settings or your profile |
-| POST | `/api/clients`, `/api/projects`, `/api/tasks`, `/api/conversations` | Create |
-| PATCH, DELETE | `/api/{clients,projects,tasks}/:id` | Update or delete |
-| POST | `/api/tasks/:id/move` | Change status or position |
-| POST | `/api/conversations/:id/messages`, `/api/conversations/:id/read` | Reply, mark read |
-| DELETE | `/api/conversations/:id` | Delete thread |
+| POST | `/api/actions` | Run one domain action: `{ "type": "task.create", "id"?: "...", "data"?: { ... } }` |
 
-Write requests must send `Content-Type: application/json` and may not come from another origin. This blocks cross-site request forgery while the app has no sign-in. Rejected requests get 415 or 403.
+Action types are the keys of the `handlers` map in `src/lib/engine.js`. The server resolves the organization and acting user from its own configuration and never from the request.
 
-Errors use proper status codes: 400 for validation (with `fieldErrors`), 404 for missing records, 409 when database mode is off, and 503 when the database is unreachable.
+Write requests must send `Content-Type: application/json` and may not come from another origin; rejected requests get 415 or 403. Other errors: 400 for validation (with `fieldErrors`), 403 for permission, 404 for missing records, 409 when database mode is off or the database is from an older version, and 503 when the database is unreachable.
 
 ## Known limitations
 
-- **No authentication or authorization.** A fixed demo identity is used and team invitations are not implemented. Do not deploy publicly.
-- Database mode loads the organization's snapshot for each request and serializes writes per server process. This suits a small agency's data volume, but not large datasets or several server instances.
-- No real-time updates between users. Demo mode does sync between tabs in the same browser.
-- Client-facing threads are records only, with no email or messaging integration.
-- Activity history keeps the most recent 200 entries.
+- **No authentication.** One configured identity is used. Invites are recorded but no email is sent, and nobody can accept them yet. There is no "Sign out".
+- **Notifications are in-app records only.** Email preferences are saved but no email is sent, including the end-of-meeting summary.
+- Database mode loads the organization's snapshot per request and serializes writes per server process. This is fine for a small team, not for large datasets or several server instances.
+- Chat updates use polling (database mode) and cross-tab sync (demo mode), not push.
+- Profile photos are image links. File uploads are out of scope for v1.

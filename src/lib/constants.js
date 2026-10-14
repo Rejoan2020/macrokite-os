@@ -1,58 +1,34 @@
 // Shared enums and display metadata. Used by the domain engine, server models and UI.
 
-export const CLIENT_STATUSES = ["lead", "active", "paused", "completed"];
-export const PROJECT_STATUSES = ["planning", "in_progress", "on_hold", "completed"];
-export const TASK_STATUSES = ["backlog", "todo", "in_progress", "in_review", "done"];
-export const PRIORITIES = ["low", "medium", "high", "urgent"];
-export const VISIBILITIES = ["internal", "client"];
-export const ROLES = ["owner", "admin", "member"];
-export const DATE_FORMATS = ["MMM d, yyyy", "d MMM yyyy", "yyyy-MM-dd"];
-
-export const CLIENT_STATUS_META = {
-  lead: { label: "Lead", tone: "violet" },
-  active: { label: "Active", tone: "teal" },
-  paused: { label: "Paused", tone: "amber" },
-  completed: { label: "Completed", tone: "slate" },
+export const PHASES = ["idea", "planning", "design", "build", "test", "launch", "maintain"];
+export const PHASE_LABELS = {
+  idea: "Idea",
+  planning: "Planning",
+  design: "Design",
+  build: "Build",
+  test: "Test",
+  launch: "Launch",
+  maintain: "Maintain",
 };
 
-export const PROJECT_STATUS_META = {
-  planning: { label: "Planning", tone: "violet" },
-  in_progress: { label: "In progress", tone: "teal" },
-  on_hold: { label: "On hold", tone: "amber" },
-  completed: { label: "Completed", tone: "slate" },
-};
+export const ROLES = ["admin", "member"];
+export const ROLE_LABELS = { admin: "Admin", member: "Member" };
 
-export const TASK_STATUS_META = {
-  backlog: { label: "Backlog", tone: "slate" },
-  todo: { label: "To do", tone: "blue" },
-  in_progress: { label: "In progress", tone: "teal" },
-  in_review: { label: "In review", tone: "violet" },
-  done: { label: "Done", tone: "green" },
-};
+export const TASK_STATUSES = ["todo", "doing", "done"];
+export const TASK_STATUS_LABELS = { todo: "To do", doing: "Doing", done: "Done" };
+export const TASK_SOURCES = ["manual", "meeting", "message"];
 
-export const PRIORITY_META = {
-  low: { label: "Low", tone: "slate", rank: 0 },
-  medium: { label: "Medium", tone: "blue", rank: 1 },
-  high: { label: "High", tone: "amber", rank: 2 },
-  urgent: { label: "Urgent", tone: "red", rank: 3 },
-};
+export const CONVERSATION_TYPES = ["project", "general", "dm"];
+export const NOTIFICATION_TYPES = ["mention", "assignment", "meetingInvite", "dm"];
 
-export const VISIBILITY_META = {
-  internal: { label: "Internal", tone: "slate" },
-  client: { label: "Client-facing", tone: "teal" },
-};
+export const NOTIFICATION_PREFS = [
+  { key: "mention", label: "Someone @mentions me", hint: "In project chats, General or messages" },
+  { key: "assignment", label: "A task is assigned to me", hint: "Includes action items from meetings" },
+  { key: "meetingInvite", label: "I’m invited to a meeting", hint: "Plus a reminder before it starts" },
+  { key: "dm", label: "New direct message", hint: "Only when I’m away from the app" },
+];
+export const DEFAULT_NOTIFICATION_PREFS = { mention: true, assignment: true, meetingInvite: true, dm: false };
 
-export const ROLE_META = {
-  owner: { label: "Owner" },
-  admin: { label: "Admin" },
-  member: { label: "Member" },
-};
-
-export const DEFAULT_PREFERENCES = {
-  defaultTaskPriority: "medium",
-  dueSoonDays: 7,
-  dateFormat: "MMM d, yyyy",
-};
-
-export const toOptions = (values, meta) =>
-  values.map((value) => ({ value, label: meta?.[value]?.label ?? value }));
+export const phaseLabel = (phase) => PHASE_LABELS[phase] ?? phase;
+export const phaseIndex = (phase) => PHASES.indexOf(phase);
+export const nextPhase = (phase) => PHASES[phaseIndex(phase) + 1] ?? null;

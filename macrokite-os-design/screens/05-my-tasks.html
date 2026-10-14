@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My tasks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+input[type=checkbox]{accent-color:#3fe0b5}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Overview</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Meetings</a>
+<a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Messages<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 32px 64px">
+<div style="max-width: 880px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">My tasks</h1>
+<p style="margin: 0; color: #8a8f98">6 open · <span style="color: #ff8f7a">1 overdue</span> · 1 due today</p>
+</div>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #3fe0b5; color: #062a20; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">+ Add task</button>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<label style="flex: 1 1 260px; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border: 1px solid #24272c; border-radius: 8px; background: #121417; color: #8a8f98">
+<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search tasks</span>
+<input type="search" placeholder="Search tasks" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif">
+</label>
+<label style="display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid #24272c; border-radius: 8px; background: #121417; color: #8a8f98">Project
+<select style="background: transparent; border: 0; color: #e7e8ea; font: 500 14px Geist, system-ui, sans-serif; outline: none">
+<option>All projects</option>
+<option>Fleet Tracker MVP</option>
+<option>Subscription Billing Flow</option>
+<option>Jajabor</option>
+<option>Internal</option>
+</select>
+</label>
+</div>
+
+<section aria-labelledby="g-overdue" style="display: flex; flex-direction: column; border: 1px solid #3a2420; border-radius: 12px; background: #121417; overflow: hidden">
+<h2 id="g-overdue" style="margin: 0; padding: 12px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #ff8f7a; border-bottom: 1px solid #24272c">Overdue · 1</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px">
+<input type="checkbox" aria-label="Mark done: Telematics vendor API spike" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 500">Telematics vendor API spike</div>
+<div style="font-size: 12px; color: #8a8f98">Fleet Tracker MVP · Build</div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #ff8f7a; white-space: nowrap">Oct 11</span>
+</div>
+</section>
+
+<section aria-labelledby="g-today" style="display: flex; flex-direction: column; border: 1px solid #24272c; border-radius: 12px; background: #121417; overflow: hidden">
+<h2 id="g-today" style="margin: 0; padding: 12px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3; border-bottom: 1px solid #24272c">Today · 1</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px">
+<input type="checkbox" aria-label="Mark done: Share Atlas connection setup with the team" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span style="font-weight: 500">Share Atlas connection setup with the team</span><span style="font-size: 11px; font-weight: 500; color: #8af0d3; background: #0f2e27; border-radius: 10px; padding: 2px 8px">Doing</span></div>
+<div style="font-size: 12px; color: #8a8f98">Jajabor · Build · <a href="#" style="text-decoration: none">from Weekly sync, Oct 14</a></div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #e7e8ea; white-space: nowrap">Today</span>
+</div>
+</section>
+
+<section aria-labelledby="g-week" style="display: flex; flex-direction: column; border: 1px solid #24272c; border-radius: 12px; background: #121417; overflow: hidden">
+<h2 id="g-week" style="margin: 0; padding: 12px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3; border-bottom: 1px solid #24272c">This week · 2</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid #1c1f23">
+<input type="checkbox" aria-label="Mark done: Map subscription states and edge cases" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 500">Map subscription states and edge cases</div>
+<div style="font-size: 12px; color: #8a8f98">Subscription Billing Flow · Planning</div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #a7abb3; white-space: nowrap">Thu</span>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px">
+<input type="checkbox" aria-label="Mark done: Draft agenda for launch review" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 500">Draft agenda for launch review</div>
+<div style="font-size: 12px; color: #8a8f98">Internal · Planning · <a href="#" style="text-decoration: none">from Team meeting, Oct 12</a></div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #a7abb3; white-space: nowrap">Sat</span>
+</div>
+</section>
+
+<section aria-labelledby="g-later" style="display: flex; flex-direction: column; border: 1px solid #24272c; border-radius: 12px; background: #121417; overflow: hidden">
+<h2 id="g-later" style="margin: 0; padding: 12px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3; border-bottom: 1px solid #24272c">Later · 1</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px">
+<input type="checkbox" aria-label="Mark done: Evaluate billing provider options" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 500">Evaluate billing provider options</div>
+<div style="font-size: 12px; color: #8a8f98">Subscription Billing Flow · Planning</div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #a7abb3; white-space: nowrap">Oct 27</span>
+</div>
+</section>
+
+<section aria-labelledby="g-nodate" style="display: flex; flex-direction: column; border: 1px solid #24272c; border-radius: 12px; background: #121417; overflow: hidden">
+<h2 id="g-nodate" style="margin: 0; padding: 12px 18px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3; border-bottom: 1px solid #24272c">No due date · 1</h2>
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px">
+<input type="checkbox" aria-label="Mark done: Write onboarding guide for new members" style="width: 18px; height: 18px; margin: 0; flex: none">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+<div style="font-weight: 500">Write onboarding guide for new members</div>
+<div style="font-size: 12px; color: #8a8f98">Internal · Maintain</div>
+</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #8a8f98; white-space: nowrap">—</span>
+</div>
+</section>
+
+<button type="button" style="display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 18px; border: 1px dashed #2a2e34; border-radius: 12px; background: transparent; color: #8a8f98; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">Completed this week · 6<span style="color: #3fe0b5">Show</span></button>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1040}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

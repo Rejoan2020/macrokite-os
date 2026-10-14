@@ -2,22 +2,24 @@
 
 import Link from "next/link";
 import { forwardRef } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { initials } from "@/lib/format";
-import { CLIENT_STATUS_META, PRIORITY_META, PROJECT_STATUS_META, TASK_STATUS_META, VISIBILITY_META } from "@/lib/constants";
+import { PHASES, phaseIndex } from "@/lib/constants";
 
 export const cx = (...classes) => classes.filter(Boolean).join(" ");
 
 const BUTTON_VARIANTS = {
-  primary: "bg-accent text-accent-fg hover:bg-accent-strong font-medium shadow-[0_0_0_1px_rgb(0_0_0/0.1)_inset]",
-  secondary: "bg-surface-2 text-fg border border-border hover:bg-surface-3 hover:border-border-strong",
-  ghost: "text-muted hover:text-fg hover:bg-surface-2",
-  danger: "bg-danger-soft text-danger border border-transparent hover:border-danger/40",
+  primary: "bg-accent text-accent-on hover:bg-accent-light",
+  secondary: "border border-line bg-card text-fg hover:bg-hover",
+  outline: "border border-line text-fg hover:bg-hover",
+  quiet: "border border-line text-secondary hover:bg-hover hover:text-fg",
+  danger: "border border-danger-line text-danger hover:bg-danger-outline/40",
+  ghost: "text-muted hover:bg-hover hover:text-fg",
 };
 const BUTTON_SIZES = {
-  sm: "h-7 px-2.5 text-xs gap-1.5",
-  md: "h-8 px-3 text-[13px] gap-2",
-  lg: "h-10 px-4 text-sm gap-2",
+  md: "h-11 px-[18px] text-sm gap-2",
+  sm: "h-9 px-3.5 text-[13px] gap-1.5",
+  xs: "h-8 px-3 text-xs gap-1.5",
 };
 
 export const Button = forwardRef(function Button(
@@ -25,14 +27,14 @@ export const Button = forwardRef(function Button(
   ref
 ) {
   const classes = cx(
-    "inline-flex items-center justify-center rounded-md whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none select-none",
+    "inline-flex shrink-0 items-center justify-center rounded-lg font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50 select-none",
     BUTTON_VARIANTS[variant],
     BUTTON_SIZES[size],
     className
   );
   const content = (
     <>
-      {loading ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : Icon ? <Icon className="size-3.5 shrink-0" aria-hidden /> : null}
+      {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
       {children}
     </>
   );
@@ -50,18 +52,14 @@ export const Button = forwardRef(function Button(
   );
 });
 
-export const IconButton = forwardRef(function IconButton({ icon: Icon, label, className, size = "md", ...props }, ref) {
+export const IconButton = forwardRef(function IconButton({ icon: Icon, label, className, ...props }, ref) {
   return (
     <button
       ref={ref}
       type="button"
       aria-label={label}
       title={label}
-      className={cx(
-        "inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-40",
-        size === "sm" ? "size-7" : "size-8",
-        className
-      )}
+      className={cx("inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-hover hover:text-fg disabled:opacity-40", className)}
       {...props}
     >
       <Icon className="size-4" aria-hidden />
@@ -69,185 +67,235 @@ export const IconButton = forwardRef(function IconButton({ icon: Icon, label, cl
   );
 });
 
-export function Badge({ tone = "slate", dot, className, children }) {
+const PILL_TONES = {
+  accent: "bg-accent-tint text-accent-light",
+  warning: "bg-warning-tint text-warning",
+  danger: "bg-danger-outline text-danger",
+  neutral: "bg-selected text-secondary",
+};
+
+export function Pill({ tone = "accent", className, children }) {
+  return <span className={cx("inline-flex shrink-0 items-center rounded-[10px] px-2 py-px text-[11px] font-medium whitespace-nowrap", PILL_TONES[tone], className)}>{children}</span>;
+}
+
+export const OnHoldPill = () => <Pill tone="warning">On hold</Pill>;
+export const DoingPill = () => <Pill>Doing</Pill>;
+
+/** Teal unread badge. */
+export function CountBadge({ count, label, className }) {
+  if (!count) return null;
   return (
-    <span className={cx(`tone-${tone}`, "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 whitespace-nowrap", className)}>
-      {dot && <span className={cx(`dot-${tone}`, "size-1.5 rounded-full")} aria-hidden />}
-      {children}
+    <span aria-label={label} className={cx("inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[10px] bg-accent px-[7px] text-[11px] font-semibold text-accent-on tabular-nums", className)}>
+      {count}
     </span>
   );
 }
 
-const STATUS_METAS = { client: CLIENT_STATUS_META, project: PROJECT_STATUS_META, task: TASK_STATUS_META, priority: PRIORITY_META, visibility: VISIBILITY_META };
+const AVATAR_SIZES = { sm: "size-7 text-[10px]", md: "size-9 text-xs", lg: "size-[52px] text-base" };
 
-export function StatusBadge({ kind, value, className }) {
-  const meta = STATUS_METAS[kind]?.[value];
-  if (!meta) return null;
-  return (
-    <Badge tone={meta.tone} dot={kind !== "priority"} className={className}>
-      {meta.label}
-    </Badge>
-  );
-}
-
-export function PriorityIcon({ priority, className }) {
-  const rank = PRIORITY_META[priority]?.rank ?? 0;
-  const tone = PRIORITY_META[priority]?.tone ?? "slate";
-  if (priority === "urgent") {
-    return (
-      <span title="Urgent priority" className={cx("tone-red inline-flex size-4 items-center justify-center rounded-[4px] text-[10px] font-bold", className)}>
-        !
-      </span>
-    );
-  }
-  return (
-    <span title={`${PRIORITY_META[priority]?.label} priority`} className={cx("inline-flex h-3.5 items-end gap-[2px]", className)} aria-label={`${PRIORITY_META[priority]?.label} priority`}>
-      {[0, 1, 2].map((bar) => (
-        <span key={bar} className={cx("w-[3px] rounded-sm", bar <= rank ? `dot-${tone}` : "bg-border-strong")} style={{ height: `${5 + bar * 4}px` }} />
-      ))}
-    </span>
-  );
-}
-
-const AVATAR_TONES = { teal: "tone-teal", violet: "tone-violet", blue: "tone-blue", amber: "tone-amber" };
-
-export function Avatar({ user, name, size = "md", className, tone }) {
-  const label = user?.name ?? name ?? "Unassigned";
-  const sizes = { xs: "size-5 text-[9px]", sm: "size-6 text-[10px]", md: "size-8 text-xs", lg: "size-12 text-base", xl: "size-16 text-xl" };
+export function Avatar({ user, size = "md", className, ring }) {
+  const name = user?.name ?? "Unknown";
   return (
     <span
-      title={label}
+      title={name}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-1 ring-black/10",
-        user || name ? AVATAR_TONES[tone ?? user?.avatarColor] ?? "tone-blue" : "border border-dashed border-border-strong text-subtle",
-        sizes[size],
+        "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold",
+        `avatar-${user?.avatarColor ?? "blue"}`,
+        AVATAR_SIZES[size],
+        ring && "border-2 border-card",
+        user && !user.active && "opacity-50",
         className
       )}
     >
-      {user || name ? initials(label) : "?"}
+      {initials(name)}
+      {user?.avatarUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={user.avatarUrl} alt="" className="absolute inset-0 size-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
+      )}
     </span>
   );
 }
 
-export function AvatarStack({ users, size = "sm", max = 4 }) {
+export function AvatarStack({ users, max = 4 }) {
   const shown = users.slice(0, max);
   return (
-    <span className={cx("flex", size === "xs" ? "-space-x-1" : "-space-x-1.5")}>
-      {shown.map((u) => (
-        <Avatar key={u._id} user={u} size={size} className="ring-2 ring-surface" />
+    <span className="flex items-center" aria-label={users.map((u) => u.name).join(", ")}>
+      {shown.map((u, i) => (
+        <Avatar key={u._id} user={u} size="sm" ring className={i ? "-ml-2" : ""} />
       ))}
-      {users.length > max && <span className="text-xs text-muted pl-2.5">+{users.length - max}</span>}
+      {users.length > max && <span className="pl-1.5 text-xs text-muted">+{users.length - max}</span>}
     </span>
   );
 }
 
 export function Card({ as: Tag = "div", className, children, ...props }) {
   return (
-    <Tag className={cx("rounded-xl border border-border bg-surface shadow-card", className)} {...props}>
+    <Tag className={cx("rounded-xl border border-line bg-card", className)} {...props}>
       {children}
     </Tag>
   );
 }
 
-export function CardHeader({ title, icon: Icon, action, description }) {
+/** Card with a 14px title row and an optional link on the right. */
+export function Panel({ title, action, className, children, id }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
-      <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold text-fg">
-          {Icon && <Icon className="size-4 text-subtle" aria-hidden />}
+    <section aria-labelledby={id} className={cx("flex flex-col rounded-xl border border-line bg-card", className)}>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-[18px] py-3.5">
+        <h2 id={id} className="text-sm font-semibold">
           {title}
         </h2>
-        {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
+        {action}
       </div>
-      {action}
+      {children}
+    </section>
+  );
+}
+
+export function TextLink({ href, className, children, ...props }) {
+  return (
+    <Link href={href} className={cx("text-[13px] text-accent hover:text-accent-light", className)} {...props}>
+      {children}
+    </Link>
+  );
+}
+
+/** Centred page column: 48px × 32px padding, max width 760–1040px. */
+export function Page({ width = "lg", className, children }) {
+  const widths = { sm: "max-w-[720px]", md: "max-w-[880px]", lg: "max-w-[1040px]" };
+  return (
+    <div className="px-4 pt-8 pb-16 sm:px-8 lg:pt-12">
+      <div className={cx("mx-auto flex flex-col gap-6", widths[width], className)}>{children}</div>
     </div>
   );
+}
+
+export function PageHeader({ title, summary, actions, eyebrow }) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        {eyebrow && <p className="font-mono text-xs text-faint">{eyebrow}</p>}
+        <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-strong">{title}</h1>
+        {summary && <p className="text-muted">{summary}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+/** Joins summary parts with " · ", dropping empty ones. */
+export function Summary({ parts }) {
+  const shown = parts.filter(Boolean);
+  return shown.map((part, i) => (
+    <span key={i}>
+      {i > 0 && " · "}
+      {part}
+    </span>
+  ));
+}
+
+export function SectionLabel({ as: Tag = "h2", className, children, ...props }) {
+  return (
+    <Tag className={cx("label-caps text-secondary", className)} {...props}>
+      {children}
+    </Tag>
+  );
+}
+
+/** 7-segment lifecycle bar. Done segments filled, current in the light accent, later empty; greys when on hold. */
+export function PhaseBar({ phase, onHold, height = 6, className }) {
+  const current = phaseIndex(phase);
+  return (
+    <span aria-hidden className={cx("grid grid-cols-7 gap-[3px]", className)}>
+      {PHASES.map((p, i) => (
+        <span
+          key={p}
+          className="block"
+          style={{
+            height,
+            borderRadius: height / 2,
+            background:
+              i < current
+                ? onHold ? "var(--phase-done-hold)" : "var(--phase-done)"
+                : i === current
+                  ? onHold ? "var(--phase-current-hold)" : "var(--phase-current)"
+                  : "var(--phase-todo)",
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Segmented control / tab group (10px radius, 36px items). */
+export function TabGroup({ label, items, value, onChange, role = "tablist", className }) {
+  return (
+    <div role={role} aria-label={label} className={cx("flex max-w-full flex-wrap gap-1 self-start rounded-[10px] border border-line bg-card p-1", className)}>
+      {items.map((item) => {
+        const selected = item.value === value;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            role={role === "tablist" ? "tab" : undefined}
+            aria-selected={role === "tablist" ? selected : undefined}
+            aria-pressed={role === "tablist" ? undefined : selected}
+            onClick={() => onChange(item.value)}
+            className={cx(
+              "flex h-9 items-center gap-1.5 rounded-[7px] px-3 text-[13px] font-medium transition-colors",
+              selected ? "bg-selected text-strong" : "text-secondary hover:text-fg",
+              item.gap && "sm:ml-2.5"
+            )}
+          >
+            {item.label}
+            {item.badge ? <CountBadge count={item.badge} label={`${item.badge} unread`} /> : item.count !== undefined && <span className="text-faint tabular-nums">{item.count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function SearchField({ value, onChange, placeholder, className }) {
+  return (
+    <label className={cx("flex h-11 items-center gap-2.5 rounded-lg border border-line bg-card px-3.5 text-muted focus-within:border-accent/60", className)}>
+      <Search className="size-4 shrink-0" aria-hidden />
+      <span className="sr-only">{placeholder}</span>
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+      />
+    </label>
+  );
+}
+
+export function Checkbox({ className, ...props }) {
+  return <input type="checkbox" className={cx("size-[18px] shrink-0 cursor-pointer", className)} {...props} />;
 }
 
 export function Spinner({ className, label = "Loading" }) {
   return <Loader2 className={cx("size-4 animate-spin text-muted", className)} aria-label={label} role="status" />;
 }
 
-export function ProgressBar({ value, className, label }) {
-  const pct = Math.max(0, Math.min(100, value));
+/** A quiet line of text for the rare case where a whole page has nothing to show. */
+export function EmptyNote({ children, action }) {
   return (
-    <div className={cx("h-1.5 w-full overflow-hidden rounded-full bg-surface-3", className)} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label ?? "Progress"}>
-      <div className={cx("h-full rounded-full transition-[width] duration-500", pct === 100 ? "dot-green" : "bg-accent")} style={{ width: `${pct}%` }} />
+    <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-dash px-[18px] py-5 text-muted">
+      <p>{children}</p>
+      {action}
     </div>
   );
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className, compact }) {
+/** Day divider used in chats. */
+export function DayDivider({ children }) {
   return (
-    <div className={cx("flex flex-col items-center justify-center text-center", compact ? "px-4 py-8" : "px-6 py-14", className)}>
-      {Icon && (
-        <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-border bg-surface-2 text-muted">
-          <Icon className="size-5" aria-hidden />
-        </div>
-      )}
-      <p className="text-sm font-medium text-fg">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-[13px] text-muted">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
-  );
-}
-
-export function PageHeader({ title, description, actions, breadcrumbs, children }) {
-  return (
-    <header className="mb-6">
-      {breadcrumbs && (
-        <nav aria-label="Breadcrumb" className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-subtle">
-          {breadcrumbs.map((crumb, i) => (
-            <span key={crumb.label + i} className="flex items-center gap-1.5">
-              {i > 0 && <span aria-hidden>/</span>}
-              {crumb.href ? (
-                <Link href={crumb.href} className="hover:text-fg">
-                  {crumb.label}
-                </Link>
-              ) : (
-                <span className="text-muted" aria-current="page">{crumb.label}</span>
-              )}
-            </span>
-          ))}
-        </nav>
-      )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-fg sm:text-[22px]">{title}</h1>
-          {description && <p className="mt-1 text-[13px] text-muted">{description}</p>}
-        </div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
-      </div>
+    <div className="flex items-center gap-3 text-xs text-faint" role="separator">
+      <span className="h-px flex-1 bg-divider" />
       {children}
-    </header>
+      <span className="h-px flex-1 bg-divider" />
+    </div>
   );
-}
-
-export function Stat({ label, value, icon: Icon, hint, tone = "teal", href }) {
-  const body = (
-    <>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted">{label}</span>
-        {Icon && (
-          <span className={cx(`tone-${tone}`, "flex size-7 items-center justify-center rounded-lg")}>
-            <Icon className="size-3.5" aria-hidden />
-          </span>
-        )}
-      </div>
-      <div className="mt-3 text-2xl font-semibold tabular-nums tracking-tight text-fg">{value}</div>
-      {hint && <div className="mt-1 text-xs text-subtle">{hint}</div>}
-    </>
-  );
-  const classes = "block rounded-xl border border-border bg-surface p-4 shadow-card transition-colors";
-  return href ? (
-    <Link href={href} className={cx(classes, "hover:border-border-strong")}>
-      {body}
-    </Link>
-  ) : (
-    <div className={classes}>{body}</div>
-  );
-}
-
-export function Kbd({ children }) {
-  return <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">{children}</kbd>;
 }

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+input[type=checkbox]{accent-color:#3fe0b5}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">Overview</a>
+<a href="Projects.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="Meetings.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Meetings</a>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="Messages.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Messages<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="Team.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="Settings.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 48px 32px 64px">
+<div style="max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-direction: column; gap: 6px">
+<p style="margin: 0; font-family: 'Geist Mono', monospace; font-size: 12px; color: #6f747c">Wed, Oct 14</p>
+<h1 style="margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em">Good morning, Alex</h1>
+<p style="margin: 0; color: #8a8f98"><span style="color: #ff8f7a">1 task overdue</span> · 2 meetings today · 8 unread</p>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px">
+
+<section aria-labelledby="o-tasks" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #24272c"><h2 id="o-tasks" style="margin: 0; font-size: 14px; font-weight: 600">My tasks</h2><a href="Main.dc.html" style="font-size: 13px; text-decoration: none">All 6</a></div>
+<label style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #1c1f23"><input type="checkbox" style="width: 18px; height: 18px; margin: 0; flex: none"><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span>Telematics vendor API spike</span><span style="font-size: 12px; color: #8a8f98">Fleet Tracker MVP · Build</span></span><span style="font-size: 12px; font-weight: 500; color: #ff8f7a">Overdue</span></label>
+<label style="display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #1c1f23"><input type="checkbox" style="width: 18px; height: 18px; margin: 0; flex: none"><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span>Share Atlas connection setup</span><span style="font-size: 12px; color: #8a8f98">Jajabor · from Weekly sync</span></span><span style="font-size: 12px; color: #e7e8ea">Today</span></label>
+<label style="display: flex; align-items: center; gap: 12px; padding: 12px 18px"><input type="checkbox" style="width: 18px; height: 18px; margin: 0; flex: none"><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span>Map subscription states</span><span style="font-size: 12px; color: #8a8f98">Subscription Billing Flow · Planning</span></span><span style="font-size: 12px; color: #a7abb3">Thu</span></label>
+</section>
+
+<section aria-labelledby="o-unread" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #24272c"><h2 id="o-unread" style="margin: 0; font-size: 14px; font-weight: 600">Unread</h2><span style="font-size: 13px; color: #8a8f98">8 messages</span></div>
+<button type="button" aria-expanded="{{projExpanded}}" onClick="{{toggleProj}}" style="display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 18px; border: 0; background: transparent; color: #8a8f98; font: 600 11px Geist, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; text-align: left"><span aria-hidden="true" style="{{projChevron}}">▾</span><span style="flex: 1">Projects</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500; color: #6f747c">3</span></button>
+<sc-if value="{{open.projects}}" hint-placeholder-val="{{true}}">
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 18px 9px 36px; color: #e7e8ea; text-decoration: none"><span># Jajabor</span><span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">2</span></a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 18px 9px 36px; color: #e7e8ea; text-decoration: none"><span># Patient Portal v2</span><span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+</sc-if>
+<button type="button" aria-expanded="{{genExpanded}}" onClick="{{toggleGen}}" style="display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 18px; border: 0; border-top: 1px solid #1c1f23; background: transparent; color: #8a8f98; font: 600 11px Geist, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; text-align: left"><span aria-hidden="true" style="{{genChevron}}">▾</span><span style="flex: 1">General</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500; color: #6f747c">4</span></button>
+<sc-if value="{{open.general}}" hint-placeholder-val="{{true}}">
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 18px 9px 36px; color: #e7e8ea; text-decoration: none"><span># General <span style="color: #8a8f98">· you were mentioned</span></span><span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">4</span></a>
+</sc-if>
+<button type="button" aria-expanded="{{msgExpanded}}" onClick="{{toggleMsg}}" style="display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 8px 18px; border: 0; border-top: 1px solid #1c1f23; background: transparent; color: #8a8f98; font: 600 11px Geist, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; text-align: left"><span aria-hidden="true" style="{{msgChevron}}">▾</span><span style="flex: 1">Messages</span><span style="letter-spacing: 0; text-transform: none; font-weight: 500; color: #6f747c">1</span></button>
+<sc-if value="{{open.messages}}" hint-placeholder-val="{{true}}">
+<a href="Messages.dc.html" style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 18px 14px 36px; color: #e7e8ea; text-decoration: none"><span>Tanvir Karim <span style="color: #8a8f98">· Lunch at 1?</span></span><span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+</sc-if>
+</section>
+
+<section aria-labelledby="o-meet" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #24272c"><h2 id="o-meet" style="margin: 0; font-size: 14px; font-weight: 600">Meetings today</h2><a href="Meetings.dc.html" style="font-size: 13px; text-decoration: none">This week</a></div>
+<a href="Meeting.dc.html" style="display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-bottom: 1px solid #1c1f23; color: #e7e8ea; text-decoration: none"><span style="flex: none; width: 64px; font-family: 'Geist Mono', monospace; font-size: 13px; color: #3fe0b5">3:00 PM</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span>Jajabor weekly sync</span><span style="font-size: 12px; color: #8a8f98">2 agenda topics · 1 open item from last time</span></span></a>
+<a href="#" style="display: flex; align-items: center; gap: 14px; padding: 12px 18px; color: #e7e8ea; text-decoration: none"><span style="flex: none; width: 64px; font-family: 'Geist Mono', monospace; font-size: 13px; color: #a7abb3">5:30 PM</span><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span>Fleet Tracker phase review</span><span style="font-size: 12px; color: #8a8f98">No agenda yet</span></span></a>
+</section>
+
+<section aria-labelledby="o-dec" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #24272c"><h2 id="o-dec" style="margin: 0; font-size: 14px; font-weight: 600">Recent decisions</h2></div>
+<div style="display: flex; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #1c1f23"><span aria-hidden="true" style="color: #3fe0b5">✓</span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span>One Atlas cluster until launch</span><span style="font-size: 12px; color: #8a8f98">Jajabor · Oct 7</span></span></div>
+<div style="display: flex; gap: 12px; padding: 12px 18px; border-bottom: 1px solid #1c1f23"><span aria-hidden="true" style="color: #3fe0b5">✓</span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span>Launch moved to Nov 5</span><span style="font-size: 12px; color: #8a8f98">Patient Portal v2 · Oct 12</span></span></div>
+<div style="display: flex; gap: 12px; padding: 12px 18px"><span aria-hidden="true" style="color: #3fe0b5">✓</span><span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span>Ship billing in two releases</span><span style="font-size: 12px; color: #8a8f98">Subscription Billing Flow · Oct 5</span></span></div>
+</section>
+
+</div>
+
+<section aria-labelledby="o-proj" style="border: 1px solid #24272c; border-radius: 12px; background: #121417; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #24272c"><h2 id="o-proj" style="margin: 0; font-size: 14px; font-weight: 600">My projects</h2><a href="Projects.dc.html" style="font-size: 13px; text-decoration: none">All projects</a></div>
+<sc-for list="{{projects}}" as="p" hint-placeholder-count="4">
+<a href="#" style="display: grid; grid-template-columns: minmax(150px, 1fr) minmax(0, 2fr) 90px; gap: 18px; align-items: center; padding: 14px 18px; border-bottom: 1px solid #1c1f23; color: #e7e8ea; text-decoration: none">
+<span style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0"><span style="font-weight: 500">{{p.name}}</span><sc-if value="{{p.onHold}}" hint-placeholder-val="{{false}}"><span style="font-size: 11px; color: #ffd7a1; background: #33260f; border-radius: 10px; padding: 1px 7px">On hold</span></sc-if></span>
+<span style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+<span style="font-size: 12px; color: #a7abb3">{{p.phase}} · {{p.step}}/7</span>
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px"><sc-for list="{{p.segs}}" as="s" hint-placeholder-count="7"><span style="{{s.style}}"></span></sc-for></span>
+</span>
+<span style="{{p.dueStyle}}">{{p.due}}</span>
+</a>
+</sc-for>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const PHASES = ['Idea','Planning','Design','Build','Test','Launch','Maintain'];
+const raw = [
+{ name: 'Fleet Tracker MVP', phase: 'Build', due: 'Oct 8', late: true, onHold: true },
+{ name: 'Patient Portal v2', phase: 'Launch', due: 'Oct 25' },
+{ name: 'Jajabor', phase: 'Build', due: 'Nov 30' },
+{ name: 'Subscription Billing Flow', phase: 'Planning', due: 'Nov 27' }
+];
+const projects = raw.map((p) => {
+const step = PHASES.indexOf(p.phase) + 1;
+return {
+...p, step,
+segs: PHASES.map((_, i) => ({ style: 'display: block; height: 6px; border-radius: 3px; background: ' + (i < step - 1 ? (p.onHold ? '#5a5f66' : '#3fe0b5') : i === step - 1 ? (p.onHold ? '#8a8f98' : '#8af0d3') : '#24272c') })),
+dueStyle: 'justify-self: end; font-size: 13px; ' + (p.late ? 'color: #ff8f7a; font-weight: 500' : 'color: #a7abb3')
+};
+});
+const open = Object.assign({ projects: true, general: true, messages: true }, (this.state && this.state.open) || {});
+const flip = (k) => () => this.setState({ open: Object.assign({}, open, { [k]: !open[k] }) });
+const chev = (on) => 'display: inline-block; width: 10px; transition: transform .15s; transform: rotate(' + (on ? '0deg' : '-90deg') + ')';
+return {
+projects, open,
+toggleProj: flip('projects'), toggleGen: flip('general'), toggleMsg: flip('messages'),
+projExpanded: open.projects ? 'true' : 'false', genExpanded: open.general ? 'true' : 'false', msgExpanded: open.messages ? 'true' : 'false',
+projChevron: chev(open.projects), genChevron: chev(open.general), msgChevron: chev(open.messages)
+};
+}
+}
+</script>
+</body>
+</html>

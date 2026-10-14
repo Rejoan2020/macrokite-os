@@ -1,21 +1,32 @@
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function parseDate(value) {
+export function parseDate(value) {
   if (!value) return null;
   // Date-only values are calendar dates; parse them in local time to avoid off-by-one shifts.
   const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00`) : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export function formatDate(value, pattern = "MMM d, yyyy") {
-  const d = parseDate(value);
-  if (!d) return "—";
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  if (pattern === "yyyy-MM-dd") return `${yyyy}-${mm}-${dd}`;
-  if (pattern === "d MMM yyyy") return `${d.getDate()} ${MONTHS[d.getMonth()]} ${yyyy}`;
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${yyyy}`;
+/** Local calendar date as YYYY-MM-DD. */
+export const todayISO = (now = new Date()) => {
+  const d = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return d.toISOString().slice(0, 10);
+};
+
+export const addDaysISO = (iso, days) => {
+  const d = parseDate(iso);
+  d.setDate(d.getDate() + days);
+  return todayISO(d);
+};
+
+const daysBetween = (fromIso, toIso) => Math.round((parseDate(toIso) - parseDate(fromIso)) / 86_400_000);
+
+/** Monday and Sunday of the week containing `iso`. */
+export function weekBounds(iso) {
+  const day = parseDate(iso).getDay();
+  const start = addDaysISO(iso, -((day + 6) % 7));
+  return { start, end: addDaysISO(start, 6) };
 }
 
 export function formatShortDate(value) {
@@ -25,34 +36,66 @@ export function formatShortDate(value) {
   return `${MONTHS[d.getMonth()]} ${d.getDate()}${sameYear ? "" : `, ${d.getFullYear()}`}`;
 }
 
+export function formatLongDate(value) {
+  const d = parseDate(value);
+  return d ? `${WEEKDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}` : "";
+}
+
+/** "Today", a weekday within the next 6 days, otherwise "Oct 27". */
+export function formatDue(iso, today = todayISO()) {
+  if (!iso) return "—";
+  const diff = daysBetween(today, iso);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1 && diff < 7) return WEEKDAYS[parseDate(iso).getDay()];
+  return formatShortDate(iso);
+}
+
 export function formatTime(value) {
   const d = parseDate(value);
-  return d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  return d ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
 }
 
-export function formatRelative(value, now = new Date()) {
+/** Day label for a timestamp: "Today", "Yesterday", "Thu", or "Oct 7". */
+export function formatDay(value, now = new Date()) {
   const d = parseDate(value);
-  if (!d) return "—";
-  const seconds = Math.round((now - d) / 1000);
-  if (seconds < 45) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return formatShortDate(value);
+  if (!d) return "";
+  const diff = daysBetween(todayISO(now), todayISO(d));
+  if (diff === 0) return "Today";
+  if (diff === -1) return "Yesterday";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1 && diff < 7) return WEEKDAYS[d.getDay()];
+  return formatShortDate(todayISO(d));
 }
 
-/** Human description of a due date relative to today, e.g. "Due in 3 days", "2 days overdue". */
-export function dueLabel(iso, today) {
-  if (!iso) return null;
-  const diff = Math.round((parseDate(iso) - parseDate(today)) / 86_400_000);
-  if (diff === 0) return "Due today";
-  if (diff === 1) return "Due tomorrow";
-  if (diff > 1) return `Due in ${diff} days`;
-  if (diff === -1) return "1 day overdue";
-  return `${-diff} days overdue`;
+/** "today", "yesterday" or "3 days ago". */
+export function formatDaysAgo(value, now = new Date()) {
+  const d = parseDate(value);
+  if (!d) return "";
+  const days = daysBetween(todayISO(d), todayISO(now));
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+/** "Today 3:00 PM", "Thu 3:00 PM" or "Oct 7 3:00 PM". */
+export const formatWhen = (value, now = new Date()) => `${formatDay(value, now)} ${formatTime(value)}`;
+
+/** Short timestamp for lists: time today, otherwise the day. */
+export function formatStamp(value, now = new Date()) {
+  const d = parseDate(value);
+  if (!d) return "";
+  return todayISO(d) === todayISO(now) ? formatTime(value) : formatDay(value, now);
+}
+
+/** Value for <input type="datetime-local"> in local time. */
+export function toLocalInput(value) {
+  const d = parseDate(value);
+  if (!d) return "";
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+export function greeting(now = new Date()) {
+  const h = now.getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
 export const initials = (name = "") =>
@@ -63,4 +106,8 @@ export const initials = (name = "") =>
     .map((p) => p[0].toUpperCase())
     .join("") || "?";
 
+export const firstName = (name = "") => name.split(/\s+/)[0] ?? name;
+
 export const pluralize = (count, word, plural = `${word}s`) => `${count} ${count === 1 ? word : plural}`;
+
+export const joinNames = (users) => users.map((u) => firstName(u.name)).join(", ");

@@ -1,102 +1,208 @@
-// Domain engine checks. Run: node --import ./scripts/register.mjs scripts/engine.test.mjs
+// Domain engine checks. Run: npm test
 import assert from "node:assert/strict";
-import { applyAction, applyChanges, deletionImpact, DomainError } from "../src/lib/engine.js";
+import { applyAction, applyChanges, COLLECTIONS, DomainError } from "../src/lib/engine.js";
 import { buildSeed, SEED_ORG_ID, SEED_OWNER_ID } from "../src/lib/seed.js";
-import { dashboardMetrics, projectProgress, todayISO } from "../src/lib/selectors.js";
+import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/lib/selectors.js";
+import { addDaysISO, todayISO } from "../src/lib/format.js";
+import { parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
 let state = buildSeed(new Date());
-const run = (action) => {
-  const out = applyAction(state, action, ctx);
+const run = (action, context = ctx) => {
+  const out = applyAction(state, action, context);
   // The changeset must reproduce the same state (this is what database mode persists).
   const replayed = applyChanges(state, out.changes);
-  for (const key of ["clients", "projects", "tasks", "conversations", "messages"]) {
-    assert.deepEqual(new Set(replayed[key].map((d) => d._id)), new Set(out.state[key].map((d) => d._id)), `changeset mismatch in ${key}`);
+  for (const key of COLLECTIONS) {
+    assert.deepEqual(replayed[key], out.state[key], `changeset mismatch in ${key}`);
   }
   state = out.state;
   return out.result;
 };
-const fails = (action, check) => {
-  try { applyAction(state, action, ctx); } catch (e) { assert.ok(e instanceof DomainError); check?.(e); return; }
+const fails = (action, check, context = ctx) => {
+  try {
+    applyAction(state, action, context);
+  } catch (e) {
+    assert.ok(e instanceof DomainError, e);
+    check?.(e);
+    return;
+  }
   assert.fail(`expected ${action.type} to fail`);
 };
-const test = (name, fn) => { fn(); console.log("ok -", name); };
+const as = (userId) => ({ ...ctx, userId });
+const test = (name, fn) => {
+  fn();
+  console.log("ok -", name);
+};
+const today = todayISO();
 
-test("validation rejects invalid client input", () => {
-  fails({ type: "client.create", data: { name: "", company: "X", email: "nope", status: "lead" } }, (e) => {
-    assert.equal(e.status, 400);
-    assert.ok(e.fieldErrors.name && e.fieldErrors.email);
-  });
-});
-
-let client;
-test("client create / update", () => {
-  client = run({ type: "client.create", data: { name: "Jo Park", company: "Test Co", email: "JO@test.example", status: "lead", orgId: "org_evil" } });
-  assert.equal(client.orgId, SEED_ORG_ID, "orgId comes from context, not payload");
-  assert.equal(client.email, "jo@test.example");
-  const updated = run({ type: "client.update", id: client._id, data: { status: "active" } });
-  assert.equal(updated.status, "active");
-  assert.ok(state.activities.some((a) => a.clientId === client._id));
+test("seed is consistent", () => {
+  const ids = new Set(state.projects.map((p) => p._id));
+  assert.equal(state.projects.filter((p) => p.isInternal).length, 1, "exactly one Internal project");
+  assert.ok(state.tasks.every((t) => ids.has(t.projectId) && t.assigneeId), "every task has a project and assignee");
+  assert.ok(state.projects.every((p) => state.conversations.some((c) => c.type === "project" && c.projectId === p._id)), "every project has a channel");
+  const unread = unreadByConversation(state, SEED_OWNER_ID);
+  assert.equal(unread.cnv_general.count, 4);
+  assert.equal(unread.cnv_general.mentioned, true);
+  assert.equal(unread.cnv_jajabor.count, 2);
+  assert.equal(unread.cnv_dm_tanvir.count, 1);
+  assert.equal(unread.cnv_dm_sara, undefined);
 });
 
 let project;
-test("project linked to client; reference checks", () => {
-  fails({ type: "project.create", data: { name: "P", clientId: "cli_missing", status: "planning", priority: "low" } }, (e) => assert.ok(e.fieldErrors.clientId));
-  fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", memberIds: ["usr_intruder"] } });
-  fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", startDate: "2026-05-02", deadline: "2026-05-01" } }, (e) => assert.ok(e.fieldErrors.deadline));
-  fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", deadline: "2026-02-31" } }, (e) => assert.equal(e.fieldErrors.deadline, "Use a valid date"));
-  project = run({ type: "project.create", data: { name: "Launch", clientId: client._id, status: "in_progress", priority: "high", memberIds: [SEED_OWNER_ID] } });
-  assert.equal(project.clientId, client._id);
+test("projects: create with channel, advance phase, hold, archive", () => {
+  fails({ type: "project.create", data: { name: "" } }, (e) => assert.ok(e.fieldErrors.name));
+  fails({ type: "project.create", data: { name: "P", memberIds: ["usr_intruder"] } }, (e) => assert.ok(e.fieldErrors.memberIds));
+  project = run({ type: "project.create", data: { name: "Launchpad", description: "One line", memberIds: ["usr_sara"], orgId: "org_evil" } });
+  assert.equal(project.orgId, SEED_ORG_ID, "orgId comes from context, not payload");
+  assert.equal(project.phase, "idea");
+  assert.deepEqual(project.memberIds.sort(), ["usr_alex", "usr_sara"], "creator is always a member");
+  assert.ok(state.conversations.some((c) => c.type === "project" && c.projectId === project._id));
+  assert.equal(run({ type: "project.advance", id: project._id }).phase, "planning");
+  run({ type: "project.hold", id: project._id, data: { onHold: true } });
+  assert.equal(state.projects.find((p) => p._id === project._id).onHold, true);
+  fails({ type: "project.archive", id: "prj_internal", data: { archived: true } });
+  const finished = run({ type: "project.update", id: project._id, data: { phase: "maintain" } });
+  fails({ type: "project.advance", id: finished._id });
+  run({ type: "project.update", id: project._id, data: { phase: "planning" } });
 });
 
-test("tasks: create, assign, move, progress, metrics", () => {
-  const before = dashboardMetrics(state, { today: todayISO() });
-  const a = run({ type: "task.create", data: { title: "A", projectId: project._id, status: "todo", priority: "high", assigneeId: "usr_sam", dueDate: "2000-01-01" } });
-  run({ type: "task.create", data: { title: "B", projectId: project._id, status: "todo", priority: "low" } });
-  fails({ type: "task.create", data: { title: "C", status: "todo", priority: "low", assigneeId: "usr_nobody" } });
-  let m = dashboardMetrics(state, { today: todayISO() });
-  assert.equal(m.openTasks, before.openTasks + 2);
-  assert.equal(m.overdueTasks.length, before.overdueTasks.length + 1);
-  assert.equal(projectProgress(project._id, state.tasks).percent, 0);
-  run({ type: "task.move", id: a._id, data: { status: "done" } });
-  assert.equal(projectProgress(project._id, state.tasks).percent, 50);
-  assert.ok(state.tasks.find((t) => t._id === a._id).completedAt);
-  m = dashboardMetrics(state, { today: todayISO() });
-  assert.equal(m.overdueTasks.length, before.overdueTasks.length);
-  const edited = run({ type: "task.update", id: a._id, data: { status: "in_review", assigneeId: SEED_OWNER_ID } });
-  assert.equal(edited.completedAt, null);
+test("tasks: defaults, toggle, assignment notifications", () => {
+  fails({ type: "task.create", data: { title: "No project" } }, (e) => assert.ok(e.fieldErrors.projectId));
+  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeId: "usr_nobody" } }, (e) => assert.ok(e.fieldErrors.assigneeId));
+  const mine = run({ type: "task.create", data: { title: "Mine", projectId: project._id } });
+  assert.equal(mine.assigneeId, SEED_OWNER_ID, "assignee defaults to me");
+  assert.equal(mine.phase, "planning", "phase defaults to the project's phase");
+  assert.equal(mine.status, "todo");
+  const before = state.notifications.length;
+  const theirs = run({ type: "task.create", data: { title: "Theirs", projectId: project._id, assigneeId: "usr_sara", dueDate: "2000-01-01" } });
+  assert.equal(state.notifications.length, before + 1);
+  assert.equal(state.notifications.at(-1).userId, "usr_sara");
+  run({ type: "task.toggle", id: theirs._id, data: { done: true } });
+  assert.ok(state.tasks.find((t) => t._id === theirs._id).completedAt);
+  run({ type: "task.toggle", id: theirs._id, data: { done: false } });
+  assert.equal(state.tasks.find((t) => t._id === theirs._id).completedAt, null);
+  const doing = run({ type: "task.update", id: mine._id, data: { status: "doing", dueDate: today } });
+  assert.equal(doing.status, "doing");
+  assert.ok(groupMyTasks(state.tasks.filter((t) => t._id === mine._id), today).today.length === 1);
   fails({ type: "task.update", id: "tsk_missing", data: {} }, (e) => assert.equal(e.status, 404));
+  run({ type: "task.delete", id: mine._id });
 });
 
-let thread;
-test("conversations: create, reply, read state, client log", () => {
-  fails({ type: "conversation.create", data: { subject: "S", visibility: "client", body: "hi" } });
-  thread = run({ type: "conversation.create", data: { subject: "Kickoff", visibility: "client", projectId: project._id, body: "Hello" } });
-  assert.equal(thread.clientId, client._id, "client derived from project");
-  run({ type: "message.create", conversationId: thread._id, data: { body: "Client said yes", authorType: "client" } });
-  assert.equal(state.messages.filter((m) => m.conversationId === thread._id).length, 2);
-  const internal = run({ type: "conversation.create", data: { subject: "Internal", visibility: "internal", body: "x" } });
-  fails({ type: "message.create", conversationId: internal._id, data: { body: "y", authorType: "client" } });
-  fails({ type: "message.create", conversationId: thread._id, data: { body: "   " } });
+let meeting;
+test("meetings: agenda, decisions, action items, end notifies once per person", () => {
+  const startsAt = new Date(Date.now() + 3600_000).toISOString();
+  meeting = run({ type: "meeting.create", data: { projectId: project._id, title: "Kickoff", startsAt, attendeeIds: ["usr_alex", "usr_sara"] } });
+  assert.ok(state.notifications.some((x) => x.userId === "usr_sara" && x.type === "meetingInvite" && x.targetId === meeting._id));
+  fails({ type: "meeting.create", data: { projectId: project._id, title: "Bad", startsAt: "nope" } }, (e) => assert.ok(e.fieldErrors.startsAt));
+  fails({ type: "meeting.create", data: { projectId: project._id, title: "Bad", startsAt, callUrl: "javascript:alert(1)" } }, (e) => assert.ok(e.fieldErrors.callUrl));
+
+  run({ type: "agenda.add", id: meeting._id, data: { text: "Scope" } });
+  const topic = state.meetings.find((m) => m._id === meeting._id).agenda[0];
+  run({ type: "agenda.toggle", id: meeting._id, data: { itemId: topic._id } });
+  assert.equal(state.meetings.find((m) => m._id === meeting._id).agenda[0].covered, true);
+  fails({ type: "agenda.add", id: meeting._id, data: { text: " " } });
+  run({ type: "decision.add", id: meeting._id, data: { text: "Ship in two releases" } });
+  assert.equal(state.meetings.find((m) => m._id === meeting._id).decisions.length, 1);
+
+  const notesBefore = state.notifications.length;
+  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "A", assigneeId: "usr_sara" } });
+  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "B", assigneeId: "usr_sara" } });
+  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "C" } });
+  assert.equal(state.notifications.length, notesBefore, "action items are announced when the meeting ends");
+  assert.ok(state.tasks.filter((t) => t.meetingId === meeting._id).every((t) => t.source === "meeting"));
+  fails({ type: "task.create", data: { projectId: "prj_jajabor", meetingId: meeting._id, title: "Wrong project" } });
+
+  const ended = run({ type: "meeting.end", id: meeting._id });
+  assert.equal(ended.notified, 1);
+  const batch = state.notifications.slice(notesBefore);
+  assert.equal(batch.length, 1);
+  assert.equal(batch[0].text, "You got 2 action items from Kickoff");
+  fails({ type: "meeting.end", id: meeting._id });
+
+  // The next meeting surfaces what is still open from this one.
+  const next = run({ type: "meeting.create", data: { projectId: project._id, title: "Follow-up", startsAt: new Date(Date.now() + 86_400_000).toISOString() } });
+  assert.equal(stillOpenFromLast(next, state).length, 3);
+  run({ type: "meeting.delete", id: next._id });
 });
 
-test("cascade delete of client removes projects, tasks, threads, messages", () => {
-  const impact = deletionImpact(state, "client", client._id);
-  assert.deepEqual(impact, { projects: 1, tasks: 2, conversations: 1 });
-  run({ type: "client.delete", id: client._id });
-  assert.ok(!state.projects.some((p) => p._id === project._id));
-  assert.ok(!state.tasks.some((t) => t.projectId === project._id));
-  assert.ok(!state.messages.some((m) => m.conversationId === thread._id));
+test("conversations: mentions, DMs, read state", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  const message = run({ type: "message.create", id: general._id, data: { body: "Hey @sara and @Tanvir, see https://example.com" } }, as("usr_nadia"));
+  assert.deepEqual(message.mentions.sort(), ["usr_sara", "usr_tanvir"]);
+  assert.ok(state.notifications.some((x) => x.userId === "usr_sara" && x.type === "mention" && x.targetId === message._id));
+  assert.equal(unreadByConversation(state, "usr_nadia")[general._id], undefined, "author has read their own message");
+
+  const dm = run({ type: "dm.send", data: { userId: "usr_sara", body: "ping" } });
+  assert.equal(dm.conversationId, "cnv_dm_sara", "reuses the existing DM");
+  const fresh = run({ type: "dm.send", data: { userId: "usr_tanvir", body: "hi" } }, as("usr_nadia"));
+  const conv = state.conversations.find((c) => c._id === fresh.conversationId);
+  assert.deepEqual(conv.memberIds.sort(), ["usr_nadia", "usr_tanvir"]);
+  assert.ok(state.notifications.some((x) => x.userId === "usr_tanvir" && x.type === "dm"));
+  fails({ type: "message.create", id: conv._id, data: { body: "snoop" } }, (e) => assert.equal(e.status, 404));
+  fails({ type: "dm.send", data: { userId: SEED_OWNER_ID, body: "me" } });
+
+  assert.equal(unreadByConversation(state, "usr_tanvir")[conv._id].count, 1);
+  run({ type: "conversation.read", id: conv._id }, as("usr_tanvir"));
+  assert.equal(unreadByConversation(state, "usr_tanvir")[conv._id], undefined);
+  assert.ok(state.notifications.filter((x) => x.userId === "usr_tanvir" && x.targetId === fresh._id).every((x) => x.readAt));
 });
 
-test("workspace + profile updates; foreign org rejected", () => {
-  fails({ type: "workspace.update", data: { name: "", preferences: { defaultTaskPriority: "low", dueSoonDays: 7, dateFormat: "yyyy-MM-dd" } } });
-  run({ type: "workspace.update", data: { name: "MacroKite Studio", description: "", preferences: { defaultTaskPriority: "low", dueSoonDays: 10, dateFormat: "yyyy-MM-dd" } } });
-  assert.equal(state.org.name, "MacroKite Studio");
-  run({ type: "profile.update", data: { name: "Alex M." } });
-  assert.equal(state.users.find((u) => u._id === SEED_OWNER_ID).name, "Alex M.");
-  assert.throws(() => applyAction(state, { type: "client.delete", id: "cli_harbor" }, { ...ctx, orgId: "org_other" }), DomainError);
+test("team: admin-only invites, roles and deactivation", () => {
+  fails({ type: "member.invite", data: { email: "x@y.dev" } }, (e) => assert.equal(e.status, 403), as("usr_sara"));
+  fails({ type: "member.invite", data: { email: "sara@macrokite.dev" } }, (e) => assert.ok(e.fieldErrors.email));
+  fails({ type: "member.invite", data: { email: "rafi@macrokite.dev" } }, (e) => assert.ok(e.fieldErrors.email));
+  const invite = run({ type: "member.invite", data: { email: "New@Macrokite.dev" } });
+  assert.equal(invite.email, "new@macrokite.dev");
+  run({ type: "invite.resend", id: invite._id });
+  run({ type: "invite.cancel", id: invite._id });
+  fails({ type: "member.role", id: SEED_OWNER_ID, data: { role: "member" } });
+  assert.equal(run({ type: "member.role", id: "usr_sara", data: { role: "admin" } }).role, "admin");
+  run({ type: "member.active", id: "usr_nadia", data: { active: false } });
+  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeId: "usr_nadia" } });
+  fails({ type: "dm.send", data: { userId: "usr_alex", body: "hi" } }, (e) => assert.equal(e.status, 403), as("usr_nadia"));
+  run({ type: "member.active", id: "usr_nadia", data: { active: true } });
+  run({ type: "member.role", id: "usr_sara", data: { role: "member" } });
+});
+
+test("workspace + profile; foreign org rejected", () => {
+  fails({ type: "workspace.update", data: { name: "" } });
+  fails({ type: "workspace.update", data: { name: "X" } }, (e) => assert.equal(e.status, 403), as("usr_sara"));
+  run({ type: "workspace.update", data: { name: "Macrokite Studio" } });
+  assert.equal(state.org.name, "Macrokite Studio");
+  run({ type: "profile.update", data: { name: "Alex M.", notificationPrefs: { mention: false, assignment: true, meetingInvite: true, dm: true } } });
+  const me = state.users.find((u) => u._id === SEED_OWNER_ID);
+  assert.equal(me.name, "Alex M.");
+  assert.equal(me.notificationPrefs.mention, false);
+  assert.equal(me.role, "admin", "profile updates cannot change role");
+  fails({ type: "profile.update", data: { avatarUrl: "ftp://x" } }, (e) => assert.ok(e.fieldErrors.avatarUrl));
+  assert.throws(() => applyAction(state, { type: "task.delete", id: "tsk_j1" }, { ...ctx, orgId: "org_other" }), DomainError);
+});
+
+test("text parsing: action items, days, mentions, links", () => {
+  const people = state.users;
+  const mon = parseDay("mon", "2026-10-14"); // a Wednesday
+  assert.equal(mon, "2026-10-19");
+  assert.equal(parseDay("fri", "2026-10-14"), "2026-10-16");
+  assert.equal(parseDay("wed", "2026-10-14"), "2026-10-21", "same weekday means next week");
+  assert.equal(parseDay("tomorrow", "2026-10-14"), "2026-10-15");
+  assert.equal(parseDay("Oct 21", "2026-10-14"), "2026-10-21");
+  assert.equal(parseDay("3 jan", "2026-10-14"), "2027-01-03");
+  assert.equal(parseDay("in 3 days", today), addDaysISO(today, 3));
+  assert.equal(parseDay("someday", today), null);
+
+  const ok = parseActionItem("Create prod database @Alex fri", people, "2026-10-14");
+  assert.deepEqual(ok, { title: "Create prod database", assigneeId: "usr_alex", dueDate: "2026-10-16", problems: {} });
+  assert.equal(parseActionItem("No owner", people).problems.assignee, "missing");
+  assert.equal(parseActionItem("Thing @Zed", people).problems.assignee, "unknown:Zed");
+  assert.equal(parseActionItem("Thing @tan whenever", people).problems.day, "whenever");
+  assert.equal(parseActionItem("Thing @tan", people).assigneeId, "usr_tanvir", "unique prefix matches");
+
+  assert.deepEqual(parseMentions("email a@b.com, @nobody", people), []);
+  assert.deepEqual(tokenize("hi @Sara see https://x.dev/a.", people).map((p) => p.type), ["text", "mention", "text", "link", "text"]);
+  assert.equal(socialLink("https://www.instagram.com/p/abc/").platform, "Instagram");
+  assert.equal(socialLink("https://m.facebook.com/x/posts/1").platform, "Facebook");
+  assert.equal(socialLink("https://example.com"), null);
 });
 
 console.log("\nall engine checks passed");

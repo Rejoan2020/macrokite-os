@@ -1,17 +1,16 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { databaseAdapter, demoAdapter, detectMode } from "@/lib/client/storage";
-import { indexById } from "@/lib/selectors";
-import { DEFAULT_PREFERENCES } from "@/lib/constants";
+import { databaseAdapter, demoAdapter, fetchWorkspace } from "@/lib/client/storage";
+import { indexById, unreadByConversation } from "@/lib/selectors";
 
 const WorkspaceContext = createContext(null);
 
 /** Database mode when the server has MongoDB configured; otherwise browser demo storage. */
 async function resolveWorkspace() {
-  const server = await detectMode();
+  const server = await fetchWorkspace();
   if (server.mode === "database") return { mode: "database", currentUserId: server.currentUserId, data: server.data };
-  const local = await demoAdapter.load();
+  const local = demoAdapter.load();
   return { mode: "demo", currentUserId: local.currentUserId, data: local.data };
 }
 
@@ -67,20 +66,31 @@ export function WorkspaceProvider({ children }) {
   }, [mode, commit]);
 
   // Actions run one at a time so each sees the result of the previous one.
+  const enqueue = useCallback((run) => {
+    const next = queueRef.current.then(run, run);
+    queueRef.current = next.catch(() => {});
+    return next;
+  }, []);
+
   const dispatch = useCallback(
-    (action) => {
-      const run = async () => {
+    (action) =>
+      enqueue(async () => {
         const adapter = mode === "database" ? databaseAdapter : demoAdapter;
         const { state, result } = await adapter.dispatch(stateRef.current, action, currentUserId);
         commit(state);
         return result;
-      };
-      const next = queueRef.current.then(run, run);
-      queueRef.current = next.catch(() => {});
-      return next;
-    },
-    [mode, currentUserId, commit]
+      }),
+    [enqueue, mode, currentUserId, commit]
   );
+
+  /** Pulls the latest snapshot from the server (database mode). Queued behind pending writes. */
+  const refresh = useCallback(() => {
+    if (mode !== "database") return Promise.resolve();
+    return enqueue(async () => {
+      const server = await fetchWorkspace();
+      if (server.mode === "database") commit(server.data);
+    }).catch(() => {});
+  }, [enqueue, mode, commit]);
 
   const resetDemo = useCallback(() => {
     if (mode !== "demo") return;
@@ -91,7 +101,15 @@ export function WorkspaceProvider({ children }) {
 
   const value = useMemo(() => {
     if (!data) return { status, error, mode, reload: load };
-    const usersById = indexById(data.users);
+    const users = indexById(data.users);
+    const general = data.conversations.find((c) => c.type === "general");
+    const projectChats = {};
+    const dms = {};
+    for (const c of data.conversations) {
+      if (c.type === "project") projectChats[c.projectId] = c;
+      if (c.type === "dm" && c.memberIds.includes(currentUserId)) dms[c.memberIds.find((id) => id !== currentUserId) ?? currentUserId] = c;
+    }
+    const currentUser = users[currentUserId];
     return {
       status,
       error,
@@ -99,22 +117,23 @@ export function WorkspaceProvider({ children }) {
       reload: load,
       data,
       dispatch,
+      refresh,
       resetDemo,
-      currentUser: usersById[currentUserId],
+      currentUser,
       currentUserId,
-      preferences: { ...DEFAULT_PREFERENCES, ...data.org.preferences },
+      isAdmin: currentUser?.role === "admin",
+      activeUsers: data.users.filter((u) => u.active),
+      unread: unreadByConversation(data, currentUserId),
+      chats: { general, projects: projectChats, dms },
       lookup: {
-        users: usersById,
-        clients: indexById(data.clients),
+        users,
         projects: indexById(data.projects),
         tasks: indexById(data.tasks),
-        conversations: indexById(data.conversations),
+        meetings: indexById(data.meetings),
+        messages: indexById(data.messages),
       },
-      members: data.memberships
-        .map((m) => ({ ...m, user: usersById[m.userId] }))
-        .filter((m) => m.user),
     };
-  }, [data, status, error, mode, load, dispatch, resetDemo, currentUserId]);
+  }, [data, status, error, mode, load, dispatch, refresh, resetDemo, currentUserId]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
@@ -123,4 +142,15 @@ export function useWorkspace() {
   const ctx = useContext(WorkspaceContext);
   if (!ctx) throw new Error("useWorkspace must be used inside WorkspaceProvider");
   return ctx;
+}
+
+/** Polls the server every few seconds while a chat is open (database mode only). */
+export function useLiveUpdates(active = true, intervalMs = 4000) {
+  const { mode, refresh } = useWorkspace();
+  useEffect(() => {
+    if (!active || mode !== "database") return;
+    const tick = () => document.visibilityState === "visible" && refresh();
+    const timer = setInterval(tick, intervalMs);
+    return () => clearInterval(timer);
+  }, [active, mode, refresh, intervalMs]);
 }

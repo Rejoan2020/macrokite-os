@@ -1,242 +1,172 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Building, Database, Download, HardDrive, Monitor, Moon, Palette, RotateCcw, ShieldAlert, Sun, User } from "lucide-react";
+import { useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useAction } from "@/lib/client/useAction";
-import { Avatar, Badge, Button, Card, CardHeader, PageHeader } from "@/components/ui/primitives";
-import { Field, Input, Segmented, Select, Textarea } from "@/components/ui/form";
+import { Avatar, Button, Card, Checkbox, Page, Pill } from "@/components/ui/primitives";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { DATE_FORMATS, PRIORITIES, PRIORITY_META, toOptions } from "@/lib/constants";
-import { formatDate } from "@/lib/format";
+import { Field, Input } from "@/components/ui/form";
+import { useAction } from "@/lib/client/useAction";
+import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_PREFS, PHASES, phaseLabel } from "@/lib/constants";
 
-const THEME_KEY = "macrokite-os:theme";
-
-function applyTheme(theme) {
-  const light = theme === "light" || (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
-  if (light) document.documentElement.dataset.theme = "light";
-  else delete document.documentElement.dataset.theme;
+function SectionHead({ id, title, hint, children }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-col gap-1">
+        <h2 id={id} className="text-base font-semibold">
+          {title}
+        </h2>
+        {hint && <p className="text-[13px] text-muted">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
 }
 
 export function SettingsView() {
-  const { data, currentUser } = useWorkspace();
-  return (
-    <>
-      <PageHeader title="Settings" description="Workspace details, preferences and your profile." />
-      <div className="flex max-w-3xl flex-col gap-6">
-        <WorkspaceSettings key={data.org.updatedAt} />
-        <ProfileSettings key={`${currentUser._id}-${currentUser.updatedAt}`} />
-        <AppearanceSettings />
-        <StorageSettings />
-      </div>
-    </>
-  );
-}
-
-function WorkspaceSettings() {
-  const { data, preferences } = useWorkspace();
+  const { data, currentUser, isAdmin, mode } = useWorkspace();
+  const toast = useToast();
   const { run, busy, fieldErrors } = useAction();
-  const [values, setValues] = useState({ name: data.org.name, description: data.org.description ?? "", preferences: { ...preferences } });
-  const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
-  const setPref = (key) => (e) => setValues((v) => ({ ...v, preferences: { ...v.preferences, [key]: e.target.value } }));
-  const dirty = JSON.stringify(values) !== JSON.stringify({ name: data.org.name, description: data.org.description ?? "", preferences });
-
-  const submit = (e) => {
-    e.preventDefault();
-    run({ type: "workspace.update", data: { ...values, preferences: { ...values.preferences, dueSoonDays: Number(values.preferences.dueSoonDays) } } }, { success: "Workspace saved", silent: true });
+  const initial = {
+    name: currentUser.name,
+    avatarUrl: currentUser.avatarUrl ?? "",
+    notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS, ...currentUser.notificationPrefs },
+    workspaceName: data.org.name,
   };
-
-  return (
-    <Card as="section" id="workspace" aria-labelledby="workspace-heading">
-      <CardHeader title={<span id="workspace-heading">Workspace</span>} icon={Building} description="Shown in the sidebar and used across the workspace." />
-      <form onSubmit={submit} noValidate className="flex flex-col gap-4 p-4">
-        <Field label="Workspace name" required error={fieldErrors.name}>
-          {(p) => <Input {...p} value={values.name} onChange={set("name")} />}
-        </Field>
-        <Field label="Description" error={fieldErrors.description}>
-          {(p) => <Textarea {...p} rows={2} value={values.description} onChange={set("description")} />}
-        </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Default task priority" error={fieldErrors["preferences.defaultTaskPriority"]}>
-            {(p) => <Select {...p} value={values.preferences.defaultTaskPriority} onChange={setPref("defaultTaskPriority")} options={toOptions(PRIORITIES, PRIORITY_META)} />}
-          </Field>
-          <Field label="“Due soon” window (days)" error={fieldErrors["preferences.dueSoonDays"]} hint="Used for upcoming deadlines and attention flags.">
-            {(p) => <Input {...p} type="number" min={1} max={60} value={values.preferences.dueSoonDays} onChange={setPref("dueSoonDays")} />}
-          </Field>
-          <Field label="Date format" error={fieldErrors["preferences.dateFormat"]}>
-            {(p) => (
-              <Select
-                {...p}
-                value={values.preferences.dateFormat}
-                onChange={setPref("dateFormat")}
-                options={DATE_FORMATS.map((f) => ({ value: f, label: formatDate(new Date().toISOString(), f) }))}
-              />
-            )}
-          </Field>
-        </div>
-        <div className="flex justify-end">
-          <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
-            Save workspace
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-}
-
-function ProfileSettings() {
-  const { currentUser, members, currentUserId } = useWorkspace();
-  const { run, busy, fieldErrors } = useAction();
-  const initial = { name: currentUser.name, title: currentUser.title ?? "", bio: currentUser.bio ?? "", timezone: currentUser.timezone ?? "" };
   const [values, setValues] = useState(initial);
-  const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
-  const role = members.find((m) => m.userId === currentUserId)?.role;
+  const [editingPhoto, setEditingPhoto] = useState(false);
+  const [failed, setFailed] = useState(null); // which save produced fieldErrors
+  const errors = (step) => (failed === step ? fieldErrors : {});
   const dirty = JSON.stringify(values) !== JSON.stringify(initial);
 
+  const save = async (e) => {
+    e.preventDefault();
+    const profile = { name: values.name, avatarUrl: values.avatarUrl, notificationPrefs: values.notificationPrefs };
+    setFailed("profile");
+    if (!(await run({ type: "profile.update", data: profile }, { silent: true }))) return;
+    if (isAdmin && values.workspaceName !== data.org.name) {
+      setFailed("workspace");
+      if (!(await run({ type: "workspace.update", data: { name: values.workspaceName } }, { silent: true }))) return;
+    }
+    setFailed(null);
+    setEditingPhoto(false);
+    toast.success("Changes saved");
+  };
+
   return (
-    <Card as="section" id="profile" aria-labelledby="profile-heading">
-      <CardHeader title={<span id="profile-heading">Your profile</span>} icon={User} description="How you appear to teammates on tasks, threads and activity." />
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          run({ type: "profile.update", data: values }, { success: "Profile saved", silent: true });
-        }}
-        noValidate
-        className="flex flex-col gap-4 p-4"
-      >
-        <div className="flex items-center gap-3">
-          <Avatar user={{ ...currentUser, name: values.name || currentUser.name }} size="lg" />
-          <div className="text-xs text-muted">
-            <p className="text-[13px] text-fg">{currentUser.email}</p>
-            <p className="mt-0.5 flex items-center gap-2">
-              <Badge tone="teal">{role}</Badge> Demo identity — email can’t be changed without authentication.
-            </p>
+    <Page width="sm">
+      <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-strong">Settings</h1>
+
+      <form onSubmit={save} className="flex flex-col gap-6" noValidate>
+        <Card as="section" aria-labelledby="s-profile" className="flex flex-col gap-[18px] p-[22px]">
+          <SectionHead id="s-profile" title="Profile" hint="How you appear to the team" />
+          <div className="flex flex-wrap items-center gap-3.5">
+            <Avatar user={{ ...currentUser, avatarUrl: values.avatarUrl }} size="lg" />
+            {editingPhoto ? (
+              <Field error={errors("profile").avatarUrl} className="min-w-60 flex-1">
+                {(p) => (
+                  <Input
+                    {...p}
+                    type="url"
+                    autoFocus
+                    aria-label="Photo link"
+                    placeholder="Paste a link to an image"
+                    value={values.avatarUrl}
+                    onChange={(e) => setValues((v) => ({ ...v, avatarUrl: e.target.value }))}
+                  />
+                )}
+              </Field>
+            ) : (
+              <Button variant="outline" size="sm" className="h-10" onClick={() => setEditingPhoto(true)}>
+                Change photo
+              </Button>
+            )}
           </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Full name" required error={fieldErrors.name}>
-            {(p) => <Input {...p} value={values.name} onChange={set("name")} />}
-          </Field>
-          <Field label="Title" error={fieldErrors.title}>
-            {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="e.g. Lead Engineer" />}
-          </Field>
-          <Field label="Time zone" error={fieldErrors.timezone} className="sm:col-span-2">
-            {(p) => <Input {...p} value={values.timezone} onChange={set("timezone")} placeholder="e.g. Europe/London" />}
-          </Field>
-          <Field label="Bio" error={fieldErrors.bio} className="sm:col-span-2">
-            {(p) => <Textarea {...p} rows={2} value={values.bio} onChange={set("bio")} />}
-          </Field>
-        </div>
-        <div className="flex justify-end">
-          <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
-            Save profile
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3.5">
+            <Field label="Name" error={errors("profile").name}>
+              {(p) => <Input {...p} value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} autoComplete="name" />}
+            </Field>
+            <Field label="Email" hint="Tied to how you sign in">
+              {(p) => <Input {...p} type="email" value={currentUser.email} readOnly />}
+            </Field>
+          </div>
+        </Card>
+
+        <Card as="section" aria-labelledby="s-notify" className="flex flex-col gap-3.5 p-[22px]">
+          <SectionHead id="s-notify" title="Email notifications" hint="In-app notifications are always on" />
+          {NOTIFICATION_PREFS.map((pref) => (
+            <label key={pref.key} className="flex min-h-11 cursor-pointer items-center justify-between gap-4 border-t border-row pt-3">
+              <span className="flex flex-col gap-0.5">
+                <span>{pref.label}</span>
+                <span className="text-xs text-muted">{pref.hint}</span>
+              </span>
+              <Checkbox
+                checked={values.notificationPrefs[pref.key]}
+                onChange={(e) => setValues((v) => ({ ...v, notificationPrefs: { ...v.notificationPrefs, [pref.key]: e.target.checked } }))}
+              />
+            </label>
+          ))}
+        </Card>
+
+        {isAdmin && (
+          <Card as="section" aria-labelledby="s-workspace" className="flex flex-col gap-4 p-[22px]">
+            <SectionHead id="s-workspace" title="Workspace">
+              <Pill>Admins only</Pill>
+            </SectionHead>
+            <Field label="Workspace name" error={errors("workspace").name}>
+              {(p) => <Input {...p} value={values.workspaceName} onChange={(e) => setValues((v) => ({ ...v, workspaceName: e.target.value }))} />}
+            </Field>
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] text-secondary">Lifecycle phases</span>
+              <div className="flex flex-wrap gap-1.5">
+                {PHASES.map((p) => (
+                  <span key={p} className="rounded-md border border-line px-2.5 py-[5px] text-xs text-soft">
+                    {phaseLabel(p)}
+                  </span>
+                ))}
+              </div>
+              <span className="text-xs text-faint">Fixed for every project in v1</span>
+            </div>
+          </Card>
+        )}
+
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button variant="primary" type="submit" loading={busy} disabled={!dirty}>
+            Save changes
           </Button>
         </div>
       </form>
-    </Card>
+
+      {mode === "demo" && <DemoData />}
+    </Page>
   );
 }
 
-function AppearanceSettings() {
-  const [theme, setTheme] = useState("dark");
-
-  useEffect(() => {
-    try {
-      // Reading device-local storage after mount keeps server and client markup identical.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTheme(localStorage.getItem(THEME_KEY) || "dark");
-    } catch {}
-  }, []);
-
-  const change = (value) => {
-    setTheme(value);
-    try {
-      localStorage.setItem(THEME_KEY, value);
-    } catch {}
-    applyTheme(value);
-  };
-
-  return (
-    <Card as="section" aria-labelledby="appearance-heading">
-      <CardHeader title={<span id="appearance-heading">Appearance</span>} icon={Palette} description="Saved on this device only." />
-      <div className="p-4">
-        <Segmented
-          label="Theme"
-          value={theme}
-          onChange={change}
-          options={[
-            { value: "dark", label: "Dark", icon: Moon },
-            { value: "light", label: "Light", icon: Sun },
-            { value: "system", label: "System", icon: Monitor },
-          ]}
-        />
-      </div>
-    </Card>
-  );
-}
-
-function StorageSettings() {
-  const { mode, data, resetDemo } = useWorkspace();
+function DemoData() {
+  const { resetDemo } = useWorkspace();
   const toast = useToast();
-  const [confirm, setConfirm] = useState(false);
-  const counts = ["clients", "projects", "tasks", "conversations", "messages"].map((k) => `${data[k].length} ${k}`).join(" · ");
-
-  const download = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement("a"), { href: url, download: `macrokite-os-${new Date().toISOString().slice(0, 10)}.json` });
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
+  const [confirming, setConfirming] = useState(false);
   return (
-    <Card as="section" id="storage" aria-labelledby="storage-heading">
-      <CardHeader title={<span id="storage-heading">Data storage & security</span>} icon={mode === "database" ? Database : HardDrive} />
-      <div className="flex flex-col gap-4 p-4 text-[13px]">
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-surface-2 p-3">
-          {mode === "database" ? <Database className="mt-0.5 size-4 text-accent" aria-hidden /> : <HardDrive className="mt-0.5 size-4 text-accent" aria-hidden />}
-          <div>
-            <p className="font-medium text-fg">
-              {mode === "database" ? "Database mode — MongoDB" : "Demo mode — browser storage"}
-              <Badge tone={mode === "database" ? "green" : "amber"} className="ml-2">{mode === "database" ? "Connected" : "Local only"}</Badge>
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              {mode === "database"
-                ? "Records are stored server-side in MongoDB, scoped to this workspace. The connection string stays on the server."
-                : "Records live in this browser’s localStorage. They survive refreshes but are not synced to other devices or backed up. Set MONGODB_URI on the server to enable database mode."}
-            </p>
-            <p className="mt-2 text-xs text-subtle">{counts}</p>
-          </div>
-        </div>
-        <div className="flex items-start gap-3 rounded-lg border border-[var(--tone-amber-fg)]/25 bg-[var(--tone-amber-bg)] p-3 text-xs text-[var(--tone-amber-fg)]">
-          <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <p>
-            Authentication is not implemented. Everyone who can reach this app acts as the demo identity. Run it locally or on a private network
-            only — do not expose it publicly.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button icon={Download} onClick={download}>Download data (JSON)</Button>
-          {mode === "demo" && (
-            <Button variant="danger" icon={RotateCcw} onClick={() => setConfirm(true)}>
-              Reset demo data
-            </Button>
-          )}
-        </div>
-      </div>
+    <section aria-label="Demo data" className="flex flex-wrap items-center justify-between gap-3 border-t border-row pt-5 text-[13px] text-muted">
+      <p className="max-w-md">
+        Demo mode: there’s no sign-in and everything is saved in this browser only. Set <code className="font-mono text-secondary">MONGODB_URI</code> to use a database.
+      </p>
+      <Button variant="quiet" size="sm" onClick={() => setConfirming(true)}>
+        Reset demo data
+      </Button>
       <ConfirmDialog
-        open={confirm}
-        onClose={() => setConfirm(false)}
+        open={confirming}
+        onClose={() => setConfirming(false)}
         onConfirm={() => {
           resetDemo();
-          setConfirm(false);
-          toast.success("Demo data reset", "The seeded workspace has been restored.");
+          setConfirming(false);
+          toast.success("Demo data reset");
         }}
+        tone="danger"
         title="Reset demo data?"
+        description="Everything you’ve changed in this browser is replaced with the sample workspace."
         confirmLabel="Reset"
-        description="All changes made in this browser will be replaced with the original sample workspace."
       />
-    </Card>
+    </section>
   );
 }

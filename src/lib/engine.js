@@ -1,15 +1,19 @@
 import {
-  clientInput,
-  conversationInput,
   fieldErrorsFrom,
+  inviteInput,
+  lineInput,
+  meetingInput,
   messageInput,
   profileInput,
   projectInput,
+  roleInput,
   taskInput,
-  taskMoveInput,
   workspaceInput,
 } from "./schemas";
-import { CLIENT_STATUS_META, PROJECT_STATUS_META, TASK_STATUS_META } from "./constants";
+import { nextPhase, phaseLabel } from "./constants";
+import { parseMentions } from "./text";
+import { conversationMemberIds, readStateId } from "./selectors";
+import { pluralize } from "./format";
 
 /**
  * The domain engine applies one action to an organization snapshot.
@@ -17,9 +21,10 @@ import { CLIENT_STATUS_META, PROJECT_STATUS_META, TASK_STATUS_META } from "./con
  * It is pure: given the same snapshot, action and context it produces a new snapshot plus a
  * changeset describing which documents were written or removed. Demo mode keeps the new snapshot
  * in the browser; database mode persists the changeset to MongoDB. Both modes therefore share the
- * same validation, organization scoping, reference checks, cascades and activity log.
+ * same validation, organization scoping, permissions, reference checks and notifications.
  *
- * Snapshot: { org, users, memberships, clients, projects, tasks, conversations, messages, activities }
+ * Snapshot: { org, users, invites, projects, tasks, meetings, conversations, messages, readStates, notifications }
+ * Action:   { type, id?, data? }
  * Context:  { orgId, userId, now: Date, newId(prefix) } — always supplied by the trusted runtime,
  *           never by request payloads.
  */
@@ -33,9 +38,7 @@ export class DomainError extends Error {
   }
 }
 
-export const COLLECTIONS = ["users", "memberships", "clients", "projects", "tasks", "conversations", "messages", "activities"];
-
-const MAX_ACTIVITIES = 200;
+export const COLLECTIONS = ["users", "invites", "projects", "tasks", "meetings", "conversations", "messages", "readStates", "notifications"];
 
 function parse(schema, input) {
   const result = schema.safeParse(input ?? {});
@@ -48,16 +51,16 @@ function parse(schema, input) {
 function createTx(snapshot, ctx) {
   const state = { ...snapshot };
   const changes = { put: {}, del: {} };
+  const now = ctx.now.toISOString();
 
   const tx = {
     state,
     changes,
+    now,
     find(collection, id, label = "Record") {
       const doc = typeof id === "string" ? state[collection].find((d) => d._id === id) : undefined;
       // Records are always loaded per organization; the orgId check is defence in depth.
-      if (!doc || (doc.orgId && doc.orgId !== ctx.orgId)) {
-        throw new DomainError(`${label} not found.`, { status: 404 });
-      }
+      if (!doc || doc.orgId !== ctx.orgId) throw new DomainError(`${label} not found.`, { status: 404 });
       return doc;
     },
     put(collection, doc) {
@@ -78,309 +81,344 @@ function createTx(snapshot, ctx) {
       state[collection] = state[collection].filter((d) => !set.has(d._id));
       (changes.del[collection] ??= []).push(...set);
     },
-    log(verb, entityType, entity, summary, context = {}) {
-      const activity = {
-        _id: ctx.newId("act"),
-        orgId: ctx.orgId,
-        actorId: ctx.userId,
-        verb,
-        entityType,
-        entityId: entity?._id ?? null,
-        summary,
-        clientId: context.clientId ?? null,
-        projectId: context.projectId ?? null,
-        createdAt: ctx.now.toISOString(),
-      };
-      tx.put("activities", activity);
-      const sorted = [...state.activities].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      tx.remove("activities", sorted.slice(MAX_ACTIVITIES).map((a) => a._id));
+    create(collection, prefix, fields) {
+      return tx.put(collection, { _id: ctx.newId(prefix), orgId: ctx.orgId, ...fields });
+    },
+    me: () => state.users.find((u) => u._id === ctx.userId),
+    notify(userId, type, targetType, targetId, text) {
+      if (userId === ctx.userId) return;
+      const user = state.users.find((u) => u._id === userId);
+      if (!user?.active) return;
+      tx.create("notifications", "ntf", { userId, type, targetType, targetId, text, readAt: null, createdAt: now });
     },
   };
   return tx;
 }
 
-function assertMember(tx, userId, label) {
-  if (!userId) return;
-  if (!tx.state.memberships.some((m) => m.userId === userId && m.orgId === tx.state.org._id)) {
-    throw new DomainError(`${label} must be a member of this workspace.`, {
-      fieldErrors: { [label === "Assignee" ? "assigneeId" : "memberIds"]: `${label} is not a workspace member` },
-    });
+function requireAdmin(tx) {
+  if (tx.me()?.role !== "admin") throw new DomainError("Only admins can do that.", { status: 403 });
+}
+
+function activeUserIds(tx, ids, field) {
+  const active = new Set(tx.state.users.filter((u) => u.active).map((u) => u._id));
+  const unknown = ids.find((id) => !active.has(id));
+  if (unknown) throw new DomainError("Pick people who are on the team.", { fieldErrors: { [field]: "Someone selected is not an active team member" } });
+  return ids;
+}
+
+function findProject(tx, id, field = "projectId") {
+  const project = tx.state.projects.find((p) => p._id === id);
+  if (!project) throw new DomainError("Project not found.", { fieldErrors: { [field]: "Choose an existing project" } });
+  return project;
+}
+
+function conversationFor(tx, projectId) {
+  return tx.state.conversations.find((c) => c.type === "project" && c.projectId === projectId);
+}
+
+function markRead(tx, conversationId, userId) {
+  const _id = readStateId(conversationId, userId);
+  tx.put("readStates", { _id, orgId: tx.state.org._id, userId, conversationId, lastReadAt: tx.now });
+}
+
+function updateMeeting(tx, id, change) {
+  const meeting = tx.find("meetings", id, "Meeting");
+  return tx.put("meetings", { ...meeting, ...change(meeting), updatedAt: tx.now });
+}
+
+function findItem(list, itemId, label) {
+  if (!list.some((i) => i._id === itemId)) throw new DomainError(`${label} not found.`, { status: 404 });
+}
+
+function postMessage(tx, ctx, conversation, body) {
+  const members = tx.state.users.filter((u) => conversationMemberIds(conversation, tx.state).includes(u._id) && u.active);
+  const mentions = parseMentions(body, members).filter((id) => id !== ctx.userId);
+  const message = tx.create("messages", "msg", {
+    conversationId: conversation._id,
+    authorId: ctx.userId,
+    body,
+    mentions,
+    editedAt: null,
+    deletedAt: null,
+    createdAt: tx.now,
+  });
+  mentions.forEach((userId) => tx.notify(userId, "mention", "message", message._id));
+  if (conversation.type === "dm") {
+    const other = conversation.memberIds.find((id) => id !== ctx.userId);
+    if (!mentions.includes(other)) tx.notify(other, "dm", "message", message._id);
   }
+  markRead(tx, conversation._id, ctx.userId);
+  return message;
 }
-
-function assertReference(tx, collection, id, field, label) {
-  if (!id) return null;
-  const doc = tx.state[collection].find((d) => d._id === id && d.orgId === tx.state.org._id);
-  if (!doc) throw new DomainError(`${label} not found in this workspace.`, { fieldErrors: { [field]: `Choose an existing ${label.toLowerCase()}` } });
-  return doc;
-}
-
-const nextOrder = (tasks, status) =>
-  tasks.filter((t) => t.status === status).reduce((max, t) => Math.max(max, t.order ?? 0), 0) + 1;
 
 const handlers = {
-  // ---------------------------------------------------------------- clients
-  "client.create"(tx, ctx, { data }) {
-    const input = parse(clientInput, data);
-    const now = ctx.now.toISOString();
-    const client = tx.put("clients", { _id: ctx.newId("cli"), orgId: ctx.orgId, ...input, createdBy: ctx.userId, createdAt: now, updatedAt: now });
-    tx.log("created", "client", client, `added client ${client.company}`, { clientId: client._id });
-    return client;
-  },
-  "client.update"(tx, ctx, { id, data }) {
-    const current = tx.find("clients", id, "Client");
-    const input = parse(clientInput, { ...current, ...data });
-    const client = tx.put("clients", { ...current, ...input, updatedAt: ctx.now.toISOString() });
-    const summary =
-      current.status !== client.status
-        ? `marked ${client.company} as ${CLIENT_STATUS_META[client.status].label.toLowerCase()}`
-        : `updated client ${client.company}`;
-    tx.log("updated", "client", client, summary, { clientId: client._id });
-    return client;
-  },
-  "client.delete"(tx, ctx, { id }) {
-    const client = tx.find("clients", id, "Client");
-    const projectIds = tx.state.projects.filter((p) => p.clientId === id).map((p) => p._id);
-    removeProjects(tx, projectIds);
-    removeConversations(tx, tx.state.conversations.filter((c) => c.clientId === id).map((c) => c._id));
-    tx.remove("clients", [id]);
-    tx.log("deleted", "client", null, `deleted client ${client.company}`);
-    return { _id: id };
-  },
-
   // --------------------------------------------------------------- projects
   "project.create"(tx, ctx, { data }) {
-    const input = parse(projectInput, data);
-    validateProjectRefs(tx, input);
-    const now = ctx.now.toISOString();
-    const project = tx.put("projects", { _id: ctx.newId("prj"), orgId: ctx.orgId, ...input, createdBy: ctx.userId, createdAt: now, updatedAt: now });
-    tx.log("created", "project", project, `created project ${project.name}`, { clientId: project.clientId, projectId: project._id });
+    const input = parse(projectInput, { phase: "idea", ...data });
+    const memberIds = activeUserIds(tx, [...new Set([ctx.userId, ...input.memberIds])], "memberIds");
+    const project = tx.create("projects", "prj", {
+      ...input,
+      memberIds,
+      onHold: false,
+      archived: false,
+      isInternal: false,
+      createdBy: ctx.userId,
+      createdAt: tx.now,
+      updatedAt: tx.now,
+    });
+    tx.create("conversations", "cnv", { type: "project", projectId: project._id, memberIds, createdAt: tx.now });
     return project;
   },
   "project.update"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
     const input = parse(projectInput, { ...current, ...data });
-    validateProjectRefs(tx, input);
-    const project = tx.put("projects", { ...current, ...input, updatedAt: ctx.now.toISOString() });
-    const summary =
-      current.status !== project.status
-        ? `moved ${project.name} to ${PROJECT_STATUS_META[project.status].label}`
-        : `updated project ${project.name}`;
-    tx.log("updated", "project", project, summary, { clientId: project.clientId, projectId: project._id });
-    // Conversations follow their project's client so client-facing context stays accurate.
-    for (const c of tx.state.conversations.filter((c) => c.projectId === id && c.clientId !== project.clientId)) {
-      tx.put("conversations", { ...c, clientId: project.clientId, visibility: project.clientId ? c.visibility : "internal" });
-    }
+    const memberIds = activeUserIds(tx, input.memberIds, "memberIds");
+    if (!memberIds.length) throw new DomainError("A project needs at least one member.", { fieldErrors: { memberIds: "Add at least one member" } });
+    const project = tx.put("projects", { ...current, ...input, memberIds, updatedAt: tx.now });
+    const conversation = conversationFor(tx, id);
+    if (conversation) tx.put("conversations", { ...conversation, memberIds });
     return project;
   },
-  "project.delete"(tx, ctx, { id }) {
-    const project = tx.find("projects", id, "Project");
-    removeProjects(tx, [id]);
-    tx.log("deleted", "project", null, `deleted project ${project.name}`, { clientId: project.clientId });
-    return { _id: id };
+  "project.advance"(tx, ctx, { id }) {
+    const current = tx.find("projects", id, "Project");
+    const phase = nextPhase(current.phase);
+    if (!phase) throw new DomainError(`${phaseLabel(current.phase)} is the last phase.`);
+    return tx.put("projects", { ...current, phase, updatedAt: tx.now });
+  },
+  "project.hold"(tx, ctx, { id, data }) {
+    const current = tx.find("projects", id, "Project");
+    return tx.put("projects", { ...current, onHold: Boolean(data?.onHold), updatedAt: tx.now });
+  },
+  "project.archive"(tx, ctx, { id, data }) {
+    const current = tx.find("projects", id, "Project");
+    if (current.isInternal) throw new DomainError("The Internal project can’t be archived.");
+    return tx.put("projects", { ...current, archived: Boolean(data?.archived), updatedAt: tx.now });
   },
 
   // ------------------------------------------------------------------ tasks
   "task.create"(tx, ctx, { data }) {
-    const input = parse(taskInput, data);
-    const project = validateTaskRefs(tx, input);
-    const now = ctx.now.toISOString();
-    const task = tx.put("tasks", {
-      _id: ctx.newId("tsk"),
-      orgId: ctx.orgId,
+    const project = data?.projectId ? tx.state.projects.find((p) => p._id === data.projectId) : null;
+    const input = parse(taskInput, { phase: project?.phase, assigneeId: ctx.userId, status: "todo", ...data });
+    findProject(tx, input.projectId);
+    activeUserIds(tx, [input.assigneeId], "assigneeId");
+    let meeting = null;
+    if (input.meetingId) {
+      meeting = tx.find("meetings", input.meetingId, "Meeting");
+      if (meeting.projectId !== input.projectId) throw new DomainError("Action items belong to the meeting’s project.");
+    }
+    if (input.messageId) tx.find("messages", input.messageId, "Message");
+    const task = tx.create("tasks", "tsk", {
       ...input,
-      order: nextOrder(tx.state.tasks, input.status),
+      source: meeting ? "meeting" : input.messageId ? "message" : "manual",
+      completedAt: input.status === "done" ? tx.now : null,
       createdBy: ctx.userId,
-      completedAt: input.status === "done" ? now : null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: tx.now,
+      updatedAt: tx.now,
     });
-    tx.log("created", "task", task, `created task ${task.title}`, { clientId: project?.clientId, projectId: task.projectId });
+    // Action items from a running meeting are announced in one batch when the meeting ends.
+    if (!meeting || meeting.endedAt) tx.notify(task.assigneeId, "assignment", "task", task._id);
     return task;
   },
   "task.update"(tx, ctx, { id, data }) {
     const current = tx.find("tasks", id, "Task");
     const input = parse(taskInput, { ...current, ...data });
-    const project = validateTaskRefs(tx, input);
-    const statusChanged = input.status !== current.status;
+    findProject(tx, input.projectId);
+    activeUserIds(tx, [input.assigneeId], "assigneeId");
     const task = tx.put("tasks", {
       ...current,
       ...input,
-      order: statusChanged ? nextOrder(tx.state.tasks, input.status) : current.order,
-      completedAt: input.status === "done" ? current.completedAt ?? ctx.now.toISOString() : null,
-      updatedAt: ctx.now.toISOString(),
+      source: current.source,
+      meetingId: current.meetingId,
+      messageId: current.messageId,
+      completedAt: input.status === "done" ? current.completedAt ?? tx.now : null,
+      updatedAt: tx.now,
     });
-    logTaskChange(tx, current, task, project);
+    if (task.assigneeId !== current.assigneeId) tx.notify(task.assigneeId, "assignment", "task", task._id);
     return task;
   },
-  "task.move"(tx, ctx, { id, data }) {
+  "task.toggle"(tx, ctx, { id, data }) {
     const current = tx.find("tasks", id, "Task");
-    const { status, beforeId } = parse(taskMoveInput, data);
-    const column = tx.state.tasks.filter((t) => t.status === status && t._id !== id).sort((a, b) => a.order - b.order);
-    let order = nextOrder(column, status);
-    const index = beforeId ? column.findIndex((t) => t._id === beforeId) : -1;
-    if (index !== -1) {
-      const prev = column[index - 1]?.order ?? column[index].order - 1;
-      order = (prev + column[index].order) / 2;
-    }
-    const task = tx.put("tasks", {
-      ...current,
-      status,
-      order,
-      completedAt: status === "done" ? current.completedAt ?? ctx.now.toISOString() : null,
-      updatedAt: ctx.now.toISOString(),
-    });
-    const project = task.projectId ? tx.state.projects.find((p) => p._id === task.projectId) : null;
-    if (current.status !== status) logTaskChange(tx, current, task, project);
-    return task;
+    const done = Boolean(data?.done);
+    return tx.put("tasks", { ...current, status: done ? "done" : "todo", completedAt: done ? tx.now : null, updatedAt: tx.now });
   },
   "task.delete"(tx, ctx, { id }) {
-    const task = tx.find("tasks", id, "Task");
+    tx.find("tasks", id, "Task");
     tx.remove("tasks", [id]);
-    const project = task.projectId ? tx.state.projects.find((p) => p._id === task.projectId) : null;
-    tx.log("deleted", "task", null, `deleted task ${task.title}`, { clientId: project?.clientId, projectId: task.projectId });
     return { _id: id };
   },
 
-  // ---------------------------------------------------------- conversations
-  "conversation.create"(tx, ctx, { data }) {
-    const input = parse(conversationInput, data);
-    const project = assertReference(tx, "projects", input.projectId, "projectId", "Project");
-    if (project?.clientId && input.clientId && project.clientId !== input.clientId) {
-      throw new DomainError("That project belongs to a different client.", { fieldErrors: { projectId: "Project belongs to a different client" } });
-    }
-    const clientId = input.clientId ?? project?.clientId ?? null;
-    assertReference(tx, "clients", clientId, "clientId", "Client");
-    if (input.visibility === "client" && !clientId) {
-      throw new DomainError("Client-facing threads need a client.", { fieldErrors: { clientId: "Choose a client for a client-facing thread" } });
-    }
-    const now = ctx.now.toISOString();
-    const conversation = tx.put("conversations", {
-      _id: ctx.newId("cnv"),
-      orgId: ctx.orgId,
-      subject: input.subject,
-      visibility: input.visibility,
-      clientId,
-      projectId: input.projectId,
+  // --------------------------------------------------------------- meetings
+  "meeting.create"(tx, ctx, { data }) {
+    const input = parse(meetingInput, data);
+    findProject(tx, input.projectId);
+    activeUserIds(tx, input.attendeeIds, "attendeeIds");
+    const meeting = tx.create("meetings", "mtg", {
+      ...input,
+      agenda: [],
+      decisions: [],
+      endedAt: null,
       createdBy: ctx.userId,
-      lastMessageAt: now,
-      lastReadAt: { [ctx.userId]: now },
-      createdAt: now,
+      createdAt: tx.now,
+      updatedAt: tx.now,
     });
-    tx.put("messages", { _id: ctx.newId("msg"), orgId: ctx.orgId, conversationId: conversation._id, authorType: "member", authorId: ctx.userId, body: input.body, createdAt: now });
-    tx.log("created", "conversation", conversation, `started ${input.visibility === "client" ? "client thread" : "internal thread"} “${conversation.subject}”`, { clientId, projectId: input.projectId });
-    return conversation;
+    input.attendeeIds.forEach((userId) => tx.notify(userId, "meetingInvite", "meeting", meeting._id));
+    return meeting;
   },
-  "conversation.read"(tx, ctx, { id }) {
-    const current = tx.find("conversations", id, "Conversation");
-    return tx.put("conversations", { ...current, lastReadAt: { ...current.lastReadAt, [ctx.userId]: ctx.now.toISOString() } });
+  "meeting.update"(tx, ctx, { id, data }) {
+    const current = tx.find("meetings", id, "Meeting");
+    const input = parse(meetingInput, { ...current, ...data });
+    findProject(tx, input.projectId);
+    activeUserIds(tx, input.attendeeIds, "attendeeIds");
+    if (input.projectId !== current.projectId && tx.state.tasks.some((t) => t.meetingId === id)) {
+      throw new DomainError("This meeting already has action items, so its project can’t change.", { fieldErrors: { projectId: "Fixed once action items exist" } });
+    }
+    const meeting = tx.put("meetings", { ...current, ...input, updatedAt: tx.now });
+    input.attendeeIds
+      .filter((userId) => !current.attendeeIds.includes(userId))
+      .forEach((userId) => tx.notify(userId, "meetingInvite", "meeting", id));
+    return meeting;
   },
-  "conversation.delete"(tx, ctx, { id }) {
-    const conversation = tx.find("conversations", id, "Conversation");
-    removeConversations(tx, [id]);
-    tx.log("deleted", "conversation", null, `deleted thread “${conversation.subject}”`, { clientId: conversation.clientId, projectId: conversation.projectId });
+  "meeting.delete"(tx, ctx, { id }) {
+    tx.find("meetings", id, "Meeting");
+    // Action items stay as ordinary tasks.
+    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) tx.put("tasks", { ...task, meetingId: null, updatedAt: tx.now });
+    tx.remove("meetings", [id]);
     return { _id: id };
   },
-  "message.create"(tx, ctx, { conversationId, data }) {
-    const current = tx.find("conversations", conversationId, "Conversation");
-    const input = parse(messageInput, data);
-    if (input.authorType === "client" && current.visibility !== "client") {
-      throw new DomainError("Client messages can only be logged on client-facing threads.");
-    }
-    const now = ctx.now.toISOString();
-    const message = tx.put("messages", {
-      _id: ctx.newId("msg"),
-      orgId: ctx.orgId,
-      conversationId,
-      authorType: input.authorType,
-      // Logged client messages are recorded by a member; the client is identified via the thread.
-      authorId: ctx.userId,
-      body: input.body,
-      createdAt: now,
+  "agenda.add"(tx, ctx, { id, data }) {
+    const { text } = parse(lineInput("Topic", 200), data);
+    return updateMeeting(tx, id, (m) => ({ agenda: [...m.agenda, { _id: ctx.newId("agd"), title: text, covered: false }] }));
+  },
+  "agenda.toggle"(tx, ctx, { id, data }) {
+    return updateMeeting(tx, id, (m) => {
+      findItem(m.agenda, data?.itemId, "Topic");
+      return { agenda: m.agenda.map((i) => (i._id === data.itemId ? { ...i, covered: !i.covered } : i)) };
     });
-    tx.put("conversations", { ...current, lastMessageAt: now, lastReadAt: { ...current.lastReadAt, [ctx.userId]: now } });
-    tx.log(
-      "replied",
-      "conversation",
-      current,
-      input.authorType === "client" ? `logged a client reply in “${current.subject}”` : `replied in “${current.subject}”`,
-      { clientId: current.clientId, projectId: current.projectId }
-    );
-    return message;
+  },
+  "agenda.remove"(tx, ctx, { id, data }) {
+    return updateMeeting(tx, id, (m) => {
+      findItem(m.agenda, data?.itemId, "Topic");
+      return { agenda: m.agenda.filter((i) => i._id !== data.itemId) };
+    });
+  },
+  "decision.add"(tx, ctx, { id, data }) {
+    const { text } = parse(lineInput("Decision", 500), data);
+    return updateMeeting(tx, id, (m) => ({
+      decisions: [...m.decisions, { _id: ctx.newId("dec"), text, createdBy: ctx.userId, createdAt: tx.now }],
+    }));
+  },
+  "decision.remove"(tx, ctx, { id, data }) {
+    return updateMeeting(tx, id, (m) => {
+      findItem(m.decisions, data?.itemId, "Decision");
+      return { decisions: m.decisions.filter((d) => d._id !== data.itemId) };
+    });
+  },
+  "meeting.end"(tx, ctx, { id }) {
+    const current = tx.find("meetings", id, "Meeting");
+    if (current.endedAt) throw new DomainError("This meeting has already ended.");
+    const meeting = tx.put("meetings", { ...current, endedAt: tx.now, updatedAt: tx.now });
+    const byAssignee = {};
+    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) (byAssignee[task.assigneeId] ??= []).push(task);
+    let notified = 0;
+    for (const [userId, tasks] of Object.entries(byAssignee)) {
+      if (userId === ctx.userId) continue;
+      tx.notify(userId, "assignment", "meeting", id, `You got ${pluralize(tasks.length, "action item")} from ${meeting.title}`);
+      notified += 1;
+    }
+    return { ...meeting, notified };
+  },
+
+  // ---------------------------------------------------------- conversations
+  "conversation.read"(tx, ctx, { id }) {
+    const conversation = tx.find("conversations", id, "Conversation");
+    markRead(tx, id, ctx.userId);
+    const messageIds = new Set(tx.state.messages.filter((m) => m.conversationId === id).map((m) => m._id));
+    for (const n of tx.state.notifications) {
+      if (n.userId === ctx.userId && !n.readAt && n.targetType === "message" && messageIds.has(n.targetId)) {
+        tx.put("notifications", { ...n, readAt: tx.now });
+      }
+    }
+    return conversation;
+  },
+  "message.create"(tx, ctx, { id, data }) {
+    const conversation = tx.find("conversations", id, "Conversation");
+    if (conversation.type === "dm" && !conversation.memberIds.includes(ctx.userId)) {
+      throw new DomainError("Conversation not found.", { status: 404 });
+    }
+    const { body } = parse(messageInput, data);
+    return postMessage(tx, ctx, conversation, body);
+  },
+  "dm.send"(tx, ctx, { data }) {
+    const { body } = parse(messageInput, data);
+    const otherId = data?.userId;
+    if (otherId === ctx.userId) throw new DomainError("You can’t message yourself.");
+    activeUserIds(tx, [otherId], "userId");
+    const conversation =
+      tx.state.conversations.find((c) => c.type === "dm" && c.memberIds.includes(ctx.userId) && c.memberIds.includes(otherId)) ??
+      tx.create("conversations", "cnv", { type: "dm", projectId: null, memberIds: [ctx.userId, otherId], createdAt: tx.now });
+    return postMessage(tx, ctx, conversation, body);
+  },
+  "notification.read"(tx, ctx, { id }) {
+    const n = tx.find("notifications", id, "Notification");
+    if (n.userId !== ctx.userId) throw new DomainError("Notification not found.", { status: 404 });
+    return tx.put("notifications", { ...n, readAt: n.readAt ?? tx.now });
+  },
+
+  // ------------------------------------------------------------------- team
+  "member.invite"(tx, ctx, { data }) {
+    requireAdmin(tx);
+    const { email } = parse(inviteInput, data);
+    if (tx.state.users.some((u) => u.email === email)) throw new DomainError("That person is already on the team.", { fieldErrors: { email: "Already on the team" } });
+    if (tx.state.invites.some((i) => i.email === email && !i.acceptedAt)) throw new DomainError("That email already has a pending invite.", { fieldErrors: { email: "Already invited" } });
+    return tx.create("invites", "inv", { email, invitedBy: ctx.userId, createdAt: tx.now, sentAt: tx.now, acceptedAt: null });
+  },
+  "invite.resend"(tx, ctx, { id }) {
+    requireAdmin(tx);
+    const invite = tx.find("invites", id, "Invite");
+    return tx.put("invites", { ...invite, invitedBy: ctx.userId, sentAt: tx.now });
+  },
+  "invite.cancel"(tx, ctx, { id }) {
+    requireAdmin(tx);
+    tx.find("invites", id, "Invite");
+    tx.remove("invites", [id]);
+    return { _id: id };
+  },
+  "member.role"(tx, ctx, { id, data }) {
+    requireAdmin(tx);
+    if (id === ctx.userId) throw new DomainError("You can’t change your own role.");
+    const user = tx.find("users", id, "Member");
+    const { role } = parse(roleInput, data);
+    return tx.put("users", { ...user, role, updatedAt: tx.now });
+  },
+  "member.active"(tx, ctx, { id, data }) {
+    requireAdmin(tx);
+    if (id === ctx.userId) throw new DomainError("You can’t remove yourself.");
+    const user = tx.find("users", id, "Member");
+    return tx.put("users", { ...user, active: Boolean(data?.active), updatedAt: tx.now });
   },
 
   // ------------------------------------------------------ workspace/profile
   "workspace.update"(tx, ctx, { data }) {
+    requireAdmin(tx);
     const input = parse(workspaceInput, data);
-    const org = tx.put("org", { ...tx.state.org, ...input, updatedAt: ctx.now.toISOString() });
-    tx.log("updated", "workspace", org, "updated workspace settings");
-    return org;
+    return tx.put("org", { ...tx.state.org, ...input, updatedAt: tx.now });
   },
   "profile.update"(tx, ctx, { data }) {
-    const current = tx.find("users", ctx.userId, "User");
-    const input = parse(profileInput, data);
-    return tx.put("users", { ...current, ...input, updatedAt: ctx.now.toISOString() });
+    const current = tx.me();
+    const input = parse(profileInput, { ...current, ...data });
+    return tx.put("users", { ...current, ...input, updatedAt: tx.now });
   },
 };
 
-function validateProjectRefs(tx, input) {
-  assertReference(tx, "clients", input.clientId, "clientId", "Client");
-  input.memberIds = [...new Set(input.memberIds)];
-  input.memberIds.forEach((id) => assertMember(tx, id, "Team member"));
-}
-
-function validateTaskRefs(tx, input) {
-  assertMember(tx, input.assigneeId, "Assignee");
-  return assertReference(tx, "projects", input.projectId, "projectId", "Project");
-}
-
-function logTaskChange(tx, before, task, project) {
-  const context = { clientId: project?.clientId, projectId: task.projectId };
-  if (before.status !== task.status) {
-    const verb = task.status === "done" ? "completed" : "moved";
-    const summary = task.status === "done" ? `completed ${task.title}` : `moved ${task.title} to ${TASK_STATUS_META[task.status].label}`;
-    tx.log(verb, "task", task, summary, context);
-  } else if (before.assigneeId !== task.assigneeId && task.assigneeId) {
-    const assignee = tx.state.users.find((u) => u._id === task.assigneeId);
-    tx.log("assigned", "task", task, `assigned ${task.title} to ${assignee?.name ?? "a teammate"}`, context);
-  } else {
-    tx.log("updated", "task", task, `updated task ${task.title}`, context);
-  }
-}
-
-function removeProjects(tx, projectIds) {
-  if (!projectIds.length) return;
-  const ids = new Set(projectIds);
-  tx.remove("tasks", tx.state.tasks.filter((t) => ids.has(t.projectId)).map((t) => t._id));
-  removeConversations(tx, tx.state.conversations.filter((c) => ids.has(c.projectId)).map((c) => c._id));
-  tx.remove("projects", projectIds);
-}
-
-function removeConversations(tx, conversationIds) {
-  if (!conversationIds.length) return;
-  const ids = new Set(conversationIds);
-  tx.remove("messages", tx.state.messages.filter((m) => ids.has(m.conversationId)).map((m) => m._id));
-  tx.remove("conversations", conversationIds);
-}
-
-/** Records that would be removed alongside a client or project — shown in delete confirmations. */
-export function deletionImpact(snapshot, entityType, id) {
-  const projectIds = entityType === "client" ? snapshot.projects.filter((p) => p.clientId === id).map((p) => p._id) : [id];
-  const set = new Set(projectIds);
-  const conversations = snapshot.conversations.filter((c) => set.has(c.projectId) || (entityType === "client" && c.clientId === id));
-  return {
-    projects: entityType === "client" ? projectIds.length : 0,
-    tasks: snapshot.tasks.filter((t) => set.has(t.projectId)).length,
-    conversations: conversations.length,
-  };
-}
+export const ACTION_TYPES = Object.keys(handlers);
 
 export function applyAction(snapshot, action, ctx) {
   const handler = handlers[action?.type];
   if (!handler) throw new DomainError(`Unknown action “${action?.type}”.`);
   if (!snapshot?.org || snapshot.org._id !== ctx.orgId) throw new DomainError("Workspace not found.", { status: 404 });
+  if (!snapshot.users.some((u) => u._id === ctx.userId && u.active)) throw new DomainError("You are not an active member of this workspace.", { status: 403 });
   const tx = createTx(snapshot, ctx);
-  const result = handler(tx, ctx, action);
+  const result = handler(tx, ctx, { id: action.id, data: action.data ?? {} });
   return { state: tx.state, changes: tx.changes, result };
 }
 

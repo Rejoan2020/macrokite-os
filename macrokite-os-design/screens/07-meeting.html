@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jajabor weekly sync</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+input[type=checkbox]{accent-color:#3fe0b5}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Overview</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="Meetings.dc.html" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">Meetings</a>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="Messages.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Messages<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="Team.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="Settings.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 40px 32px 64px">
+<div style="max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px">
+
+<a href="Meetings.dc.html" style="align-self: flex-start; font-size: 13px; text-decoration: none; color: #8a8f98">← Meetings</a>
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em">Jajabor weekly sync</h1>
+<p style="margin: 0; color: #8a8f98">Today 3:00 PM · <a href="#" style="text-decoration: none">Jajabor</a> · Alex, Sara, Tanvir · <a href="#" style="text-decoration: none">Join call</a></p>
+</div>
+<button type="button" style="height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #3fe0b5; color: #062a20; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">End meeting</button>
+</header>
+
+<a href="#" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border: 1px solid #3d3218; border-radius: 10px; background: #17140d; color: #ffd7a1; text-decoration: none">
+<span>Still open from last meeting: <span style="color: #f2f3f5">Draft trip data model</span> · Sara · overdue</span>
+<span style="font-size: 13px; color: #ffc98a">Review</span>
+</a>
+
+<section aria-labelledby="s-agenda" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="s-agenda" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3">Agenda</h2>
+<div style="border: 1px solid #24272c; border-radius: 12px; background: #121417; padding: 6px 16px">
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #1c1f23"><input type="checkbox" checked style="width: 18px; height: 18px; margin: 0; flex: none"><span style="color: #8a8f98; text-decoration: line-through">Database setup</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #1c1f23"><input type="checkbox" style="width: 18px; height: 18px; margin: 0; flex: none"><span>Ready to move to Test?</span></label>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">New agenda topic</span><span aria-hidden="true" style="width: 18px; text-align: center; color: #6f747c">+</span><input type="text" placeholder="Add a topic" style="flex: 1; min-width: 0; height: 36px; border: 0; background: transparent; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif; outline: none"></label>
+</div>
+</section>
+
+<section aria-labelledby="s-notes" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="s-notes" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3">Notes</h2>
+<label style="display: flex"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Meeting notes</span>
+<textarea rows="6" placeholder="Write anything…" style="flex: 1; resize: vertical; padding: 14px 16px; border: 1px solid #24272c; border-radius: 12px; background: #121417; color: #d5d7db; font: 400 14px/1.65 Geist, system-ui, sans-serif; outline: none">Database: one cluster keeps costs low for now, revisit at launch. Sara asked whether we need a staging database too, probably not yet.
+
+Test phase: Build still has 3 open tasks. Agreed to finish those first.</textarea>
+</label>
+</section>
+
+<section aria-labelledby="s-decisions" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="s-decisions" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #8af0d3">Decisions</h2>
+<div style="border: 1px solid #1f4a3f; border-radius: 12px; background: #0d1f1b; padding: 6px 16px">
+<div style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #173a32; color: #d9fbf0"><span aria-hidden="true" style="color: #3fe0b5">✓</span><span>One Atlas cluster with separate dev and prod databases until launch</span></div>
+<div style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #173a32; color: #d9fbf0"><span aria-hidden="true" style="color: #3fe0b5">✓</span><span>Stay in Build until its open tasks are done</span></div>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">New decision</span><span aria-hidden="true" style="width: 12px; color: #4c8a7a">+</span><input type="text" placeholder="Add a decision" style="flex: 1; min-width: 0; height: 36px; border: 0; background: transparent; color: #d9fbf0; font: 400 14px Geist, system-ui, sans-serif; outline: none"></label>
+</div>
+</section>
+
+<section aria-labelledby="s-actions" style="display: flex; flex-direction: column; gap: 10px">
+<h2 id="s-actions" style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #a7abb3">Action items</h2>
+<div style="border: 1px solid #24272c; border-radius: 12px; background: #121417; padding: 6px 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #1c1f23"><span style="flex: 1 1 220px">Create prod database and restrict access</span><span style="font-size: 13px; color: #a7abb3">Alex · Fri</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid #1c1f23"><span style="flex: 1 1 220px">Close remaining Build tasks</span><span style="font-size: 13px; color: #a7abb3">Sara · Oct 21</span></div>
+<label style="display: flex; align-items: center; gap: 12px; min-height: 44px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">New action item</span><span aria-hidden="true" style="width: 12px; color: #6f747c">+</span><input type="text" placeholder="Task @name day, e.g. Update API docs @Tanvir mon" style="flex: 1; min-width: 0; height: 36px; border: 0; background: transparent; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif; outline: none"></label>
+</div>
+</section>
+
+<p style="margin: 0; font-size: 12px; line-height: 1.6; color: #6f747c">When you end the meeting, decisions go to the Jajabor decision log, action items become tasks for each person, and attendees get a short summary.</p>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1320}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

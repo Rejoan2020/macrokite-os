@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Messages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0c0e}
+a{color:#3fe0b5}a:hover{color:#8af0d3}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0b0c0e; color: #e7e8ea; font-family: Geist, system-ui, sans-serif; font-size: 14px; display: flex; flex-wrap: wrap">
+
+<nav aria-label="Main" style="flex: 1 1 220px; max-width: 260px; box-sizing: border-box; padding: 20px 14px; border-right: 1px solid #1f2226; display: flex; flex-direction: column; gap: 4px; background: #0e1012">
+<div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px">
+<div aria-hidden="true" style="width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid #3fe0b5; display: flex; align-items: center; justify-content: center; color: #3fe0b5; font-weight: 600; font-size: 13px">M</div>
+<div style="font-weight: 600; font-size: 15px">Macrokite</div>
+</div>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Overview</a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Projects<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">3</span></a>
+<a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Meetings</a>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">My tasks<span style="font-size: 11px; color: #8a8f98">6</span></a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="General.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none"># General<span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">5</span></a>
+<a href="#" aria-current="page" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #f2f3f5; text-decoration: none; background: #1a1d21">Messages</a>
+<div style="height: 1px; background: #1f2226; margin: 10px 4px"></div>
+<a href="Team.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Team</a>
+<a href="Settings.dc.html" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; color: #a7abb3; text-decoration: none">Settings</a>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-wrap: wrap; min-height: 100vh">
+
+<section aria-labelledby="dm-list" style="flex: 1 1 260px; max-width: 320px; border-right: 1px solid #1f2226; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 20px 18px 14px">
+<h1 id="dm-list" style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em">Messages</h1>
+<button type="button" aria-label="New message" style="width: 44px; height: 44px; border: 1px solid #24272c; border-radius: 8px; background: #121417; color: #e7e8ea; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+</button>
+</div>
+<label style="display: flex; align-items: center; gap: 10px; margin: 0 18px 12px; height: 40px; padding: 0 12px; border: 1px solid #24272c; border-radius: 8px; background: #121417; color: #8a8f98">
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Find a person</span>
+<input type="search" placeholder="Find a person" style="flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: #e7e8ea; font: 400 14px Geist, system-ui, sans-serif">
+</label>
+<div style="display: flex; flex-direction: column; padding: 0 10px 16px; gap: 2px">
+<a href="#" aria-current="true" style="display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 10px; background: #1a1d21; color: #e7e8ea; text-decoration: none">
+<div aria-hidden="true" style="flex: none; width: 36px; height: 36px; border-radius: 50%; background: #2b2442; color: #c9bfff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">SR</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">Sara Rahman</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #8a8f98">11:02</span></div>
+<span style="font-size: 13px; color: #a7abb3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Can you check the Atlas user before…</span>
+</div>
+</a>
+<a href="#" style="display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 10px; color: #e7e8ea; text-decoration: none">
+<div aria-hidden="true" style="flex: none; width: 36px; height: 36px; border-radius: 50%; background: #3a2a1a; color: #ffc98a; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">TK</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 600">Tanvir Karim</span><span style="font-size: 11px; font-weight: 600; background: #3fe0b5; color: #062a20; border-radius: 10px; padding: 1px 7px">1</span></div>
+<span style="font-size: 13px; color: #e7e8ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Lunch at 1?</span>
+</div>
+</a>
+<a href="#" style="display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 10px; color: #e7e8ea; text-decoration: none">
+<div aria-hidden="true" style="flex: none; width: 36px; height: 36px; border-radius: 50%; background: #1f2e3d; color: #a9cff5; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">NH</div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; gap: 8px"><span style="font-weight: 500; color: #c9ccd1">Nadia Hossain</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #8a8f98">Mon</span></div>
+<span style="font-size: 13px; color: #8a8f98; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Thanks, got it</span>
+</div>
+</a>
+</div>
+</section>
+
+<section aria-label="Conversation with Sara Rahman" style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column">
+<header style="display: flex; align-items: center; gap: 12px; padding: 20px 28px; border-bottom: 1px solid #1f2226">
+<div aria-hidden="true" style="width: 36px; height: 36px; border-radius: 50%; background: #2b2442; color: #c9bfff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">SR</div>
+<div style="display: flex; flex-direction: column; gap: 2px"><h2 style="margin: 0; font-size: 16px; font-weight: 600">Sara Rahman</h2><span style="font-size: 12px; color: #8a8f98">Member</span></div>
+</header>
+
+<div style="flex: 1; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 12px; color: #6f747c; font-size: 12px"><div style="flex: 1; height: 1px; background: #1f2226"></div>Today<div style="flex: 1; height: 1px; background: #1f2226"></div></div>
+<div style="align-self: flex-start; max-width: 70%; display: flex; flex-direction: column; gap: 4px">
+<div style="padding: 10px 14px; border-radius: 14px 14px 14px 4px; background: #17191d; border: 1px solid #24272c; line-height: 1.5">Morning! Are you joining the Jajabor sync at 3?</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #6f747c">10:47</span>
+</div>
+<div style="align-self: flex-end; max-width: 70%; display: flex; flex-direction: column; align-items: flex-end; gap: 4px">
+<div style="padding: 10px 14px; border-radius: 14px 14px 4px 14px; background: #0f2e27; color: #d9fbf0; line-height: 1.5">Yes, I'll be there. I'll bring the Atlas notes.</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #6f747c">10:52</span>
+</div>
+<div style="align-self: flex-start; max-width: 70%; display: flex; flex-direction: column; gap: 4px">
+<div style="padding: 10px 14px; border-radius: 14px 14px 14px 4px; background: #17191d; border: 1px solid #24272c; line-height: 1.5">Perfect. Can you check the Atlas user before then? I think the password expired.</div>
+<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #6f747c">11:02</span>
+</div>
+<button type="button" style="align-self: flex-start; height: 32px; padding: 0 12px; border: 1px dashed #2a2e34; border-radius: 8px; background: transparent; color: #8a8f98; font: 500 12px Geist, system-ui, sans-serif; cursor: pointer">Create task from message</button>
+</div>
+
+<form style="border-top: 1px solid #1f2226; padding: 16px 28px 24px">
+<label style="display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 16px; border: 1px solid #2a2e34; border-radius: 12px; background: #121417">
+<span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Message Sara Rahman</span>
+<textarea rows="1" placeholder="Message Sara" style="flex: 1; min-width: 0; resize: none; background: transparent; border: 0; outline: none; color: #e7e8ea; font: 400 14px/1.5 Geist, system-ui, sans-serif; padding: 10px 0"></textarea>
+<button type="submit" style="flex: none; height: 44px; padding: 0 18px; border: 0; border-radius: 8px; background: #3fe0b5; color: #062a20; font: 500 14px Geist, system-ui, sans-serif; cursor: pointer">Send</button>
+</label>
+</form>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

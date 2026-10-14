@@ -1,6 +1,6 @@
 import "server-only";
 import { connection } from "next/server";
-import { DomainError } from "../engine";
+import { ACTION_TYPES, DomainError } from "../engine";
 import { isDatabaseConfigured } from "./db";
 import { runAction } from "./repository";
 
@@ -48,25 +48,26 @@ function rejectCrossSite(request) {
 }
 
 /**
- * Wraps a mutation route. `toAction` maps the request to a domain action; organization and user
- * context are added on the server by the repository, never read from the request.
+ * Handles POST /api/actions. The body names one domain action: { type, id?, data? }.
+ * Organization and user context are added on the server by the repository, never read from the request.
  */
-export function mutation(toAction) {
-  return async (request, { params } = {}) => {
-    await connection();
-    const rejected = rejectCrossSite(request);
-    if (rejected) return rejected;
-    if (!isDatabaseConfigured()) {
-      return json({ error: "Database mode is not configured. The app is running in browser demo mode." }, 409);
+export async function handleAction(request) {
+  await connection();
+  const rejected = rejectCrossSite(request);
+  if (rejected) return rejected;
+  if (!isDatabaseConfigured()) {
+    return json({ error: "Database mode is not configured. The app is running in browser demo mode." }, 409);
+  }
+  try {
+    const body = await readBody(request);
+    if (!ACTION_TYPES.includes(body?.type)) throw new DomainError("Unknown action.");
+    if (body.id !== undefined && typeof body.id !== "string") throw new DomainError("Action id must be a string.");
+    if (body.data !== undefined && (typeof body.data !== "object" || body.data === null || Array.isArray(body.data))) {
+      throw new DomainError("Action data must be an object.");
     }
-    try {
-      const resolvedParams = (await params) ?? {};
-      const body = request.method === "DELETE" ? {} : await readBody(request);
-      const action = toAction(resolvedParams, body);
-      const { result, changes } = await runAction(action);
-      return json({ result, changes }, action.type.endsWith(".create") ? 201 : 200);
-    } catch (error) {
-      return errorResponse(error);
-    }
-  };
+    const { result, changes } = await runAction({ type: body.type, id: body.id, data: body.data ?? {} });
+    return json({ result, changes });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
