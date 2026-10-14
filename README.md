@@ -8,7 +8,7 @@ A minimal internal hub for the Macrokite team: project work, meetings and decisi
 
 The design spec and screen references live in [`macrokite-os-design/`](macrokite-os-design/DESIGN.md).
 
-> **Status: local MVP, not production-authenticated.** There is no sign-in. Everyone who can reach the app acts as one configured identity. Run it locally or on a private network only.
+> **Status: MVP with sign-in.** Database mode requires signing in (WorkOS: Google or email + password), and each account only sees its own workspace. Rate limiting, security headers and email delivery are still to do before a public launch.
 
 ## Quick start
 
@@ -21,26 +21,47 @@ npm run dev          # http://localhost:3000
 
 With no configuration the app starts in **demo mode**: a sample workspace is seeded into your browser's `localStorage`. Changes survive refreshes but stay in that browser. Reset it from the bottom of **Settings**.
 
-### Enable MongoDB (database mode)
+### Database mode (MongoDB + sign-in)
+
+1. **MongoDB.** Use a local server or a MongoDB Atlas cluster.
+2. **WorkOS.** Create a free account at [dashboard.workos.com](https://dashboard.workos.com), then:
+   - Under **Authentication**, turn on **Google OAuth** and **Email + Password**.
+   - Under **Redirects**, add the redirect URI `http://localhost:3000/auth/callback`, set the sign-in endpoint (initiate login URI) to `http://localhost:3000/auth/sign-in`, and set the sign-out redirect to `http://localhost:3000/`.
+   - Copy the client ID and API key.
+3. **Configure** `.env.local`:
 
 ```bash
 cp .env.example .env.local
-# then set, for example:
 # MONGODB_URI=mongodb://127.0.0.1:27017
 # MONGODB_DB=macrokite_os
+# WORKOS_CLIENT_ID=client_...
+# WORKOS_API_KEY=sk_test_...
+# WORKOS_COOKIE_PASSWORD=<openssl rand -base64 32>
+# NEXT_PUBLIC_WORKOS_REDIRECT_URI=http://localhost:3000/auth/callback
+# MACROKITE_WORKSPACE_CREATORS=you@yourcompany.com
 npm run dev
 ```
 
-When `MONGODB_URI` is set, all reads and writes go through the server to MongoDB, and the `macrokite` workspace is seeded on first run. Open chats poll for new messages every few seconds. If the database is unreachable, the app shows an error with a retry button; it never quietly falls back to demo data.
+4. **Sign in** with the email listed in `MACROKITE_WORKSPACE_CREATORS` and create your workspace; you become its admin. Invite teammates from **Team**. They join the first time they sign in with the invited email (invite emails aren't sent yet, so send them the link).
 
-A database created by the previous version of the app (clients, inbox) is not migrated. Point `MONGODB_DB` at a new database, or drop the old one.
+How accounts map to workspaces:
+
+- Every page and API call needs a signed-in account. Signed-out visitors are sent to sign-in, and the API answers 401.
+- A member record is linked to the sign-in account on first sign-in, matched by **verified** email. After that, only that account can use it.
+- Workspace data is always scoped by the member's organization. Removed (deactivated) members lose access straight away.
+- Someone with no workspace and no invite sees a "not on a team yet" screen. Only emails in `MACROKITE_WORKSPACE_CREATORS` can create workspaces; set it to `*` for open sign-up.
+- If MongoDB is configured but the WorkOS settings are missing, the app refuses to serve data rather than running without sign-in. If the database is unreachable, it shows an error with a retry button.
+
+Database mode no longer seeds sample data. A database created by an earlier version of the app is not migrated: point `MONGODB_DB` at a new database, or drop the old one.
 
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | Enables database mode. Server-only; never sent to the browser. |
 | `MONGODB_DB` | Optional database name. |
-| `MACROKITE_ORG_SLUG` | Workspace to serve (default `macrokite`, which is seeded if missing). |
-| `MACROKITE_ACTING_USER_EMAIL` | Which active member the server acts as (defaults to the first admin). |
+| `WORKOS_CLIENT_ID`, `WORKOS_API_KEY` | WorkOS application credentials. |
+| `WORKOS_COOKIE_PASSWORD` | 32+ character secret that encrypts the session cookie. |
+| `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Sign-in callback, `<app url>/auth/callback`. Must be added in WorkOS. |
+| `MACROKITE_WORKSPACE_CREATORS` | Emails allowed to create workspaces (comma-separated), or `*`. Empty means nobody. |
 
 ## Scripts
 
@@ -74,9 +95,11 @@ src/
     selectors.js     # Derived data (unread counts, task groups, meeting buckets, decision log)
     text.js          # @mentions, action-item and day parsing, social link detection
     seed.js          # Sample data (dates relative to today)
+    membership.js    # Sign-in account → member rules, new workspaces
     client/          # Storage adapters (demo: localStorage; database: fetch → API) and hooks
-    server/          # MongoDB connection, Mongoose models, org-scoped repository (server-only)
-  app/               # App Router pages, plus /api/workspace and /api/actions
+    server/          # MongoDB, Mongoose models, sign-in check, org-scoped repository (server-only)
+  proxy.js           # Refreshes the WorkOS session; sends signed-out visitors to sign-in
+  app/               # App Router pages, /auth/* sign-in routes, /api/workspace and /api/actions
   components/        # UI primitives, shell, dialogs, chat, task rows, page views
 ```
 
@@ -91,16 +114,18 @@ src/
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| GET | `/api/workspace` | Storage mode, plus the workspace snapshot in database mode |
+| GET | `/api/workspace` | Storage mode. In database mode: the signed-in account, plus the workspace snapshot (`status: "member"`) or `status: "onboarding"` |
+| POST | `/api/workspace` | Create a workspace: `{ "name": "..." }` (only for `MACROKITE_WORKSPACE_CREATORS`) |
 | POST | `/api/actions` | Run one domain action: `{ "type": "task.create", "id"?: "...", "data"?: { ... } }` |
 
-Action types are the keys of the `handlers` map in `src/lib/engine.js`. The server resolves the organization and acting user from its own configuration and never from the request.
+Action types are the keys of the `handlers` map in `src/lib/engine.js`. The server resolves the organization and acting member from the signed-in session, never from the request body.
 
-Write requests must send `Content-Type: application/json` and may not come from another origin; rejected requests get 415 or 403. Other errors: 400 for validation (with `fieldErrors`), 403 for permission, 404 for missing records, 409 when database mode is off or the database is from an older version, and 503 when the database is unreachable.
+Write requests must send `Content-Type: application/json` and may not come from another origin; rejected requests get 415 or 403. Other errors: 401 when signed out, 400 for validation (with `fieldErrors`), 403 for permission, 404 for missing records, 409 when database mode is off or the database is from an older version, and 503 when the database is unreachable.
 
 ## Known limitations
 
-- **No authentication.** One configured identity is used. Invites are recorded but no email is sent, and nobody can accept them yet. There is no "Sign out".
+- **Invites don't send email.** An invite is accepted when that email signs in; share the app link yourself.
+- **One workspace at a time.** Someone in several workspaces opens the oldest one; there is no workspace switcher yet.
 - **Notifications are in-app records only.** Email preferences are saved but no email is sent, including the end-of-meeting summary.
 - Database mode loads the organization's snapshot per request and serializes writes per server process. This is fine for a small team, not for large datasets or several server instances.
 - Chat updates use polling (database mode) and cross-tab sync (demo mode), not push.

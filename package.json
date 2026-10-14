@@ -10,6 +10,8 @@
     "test": "node --no-warnings --import ./scripts/register.mjs scripts/engine.test.mjs"
   },
   "dependencies": {
+    "@workos-inc/authkit-nextjs": "^4.4.0",
+    "@workos-inc/node": "^10.14.0",
     "lucide-react": "^1.55.0",
     "mongoose": "^9.11.2",
     "next": "16.4.0",

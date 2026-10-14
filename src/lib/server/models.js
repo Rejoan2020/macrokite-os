@@ -29,6 +29,7 @@ export const User = model(
   "User",
   {
     orgId,
+    authId: { type: String, default: null }, // sign-in account (WorkOS user id), linked on first sign-in
     name: String,
     email: String,
     avatarUrl: String,
@@ -38,10 +39,12 @@ export const User = model(
     notificationPrefs: Schema.Types.Mixed,
     ...timestamps,
   },
-  [[{ orgId: 1, email: 1 }, { unique: true }]]
+  [[{ orgId: 1, email: 1 }, { unique: true }], { authId: 1 }, { email: 1 }]
 );
 
-export const Invite = model("Invite", { orgId, email: String, invitedBy: String, createdAt: String, sentAt: String, acceptedAt: ref });
+export const Invite = model("Invite", { orgId, email: String, invitedBy: String, createdAt: String, sentAt: String, acceptedAt: ref }, [
+  { email: 1, acceptedAt: 1 },
+]);
 
 export const Project = model("Project", {
   orgId,
