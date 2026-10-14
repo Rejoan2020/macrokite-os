@@ -45,6 +45,7 @@ test("project linked to client; reference checks", () => {
   fails({ type: "project.create", data: { name: "P", clientId: "cli_missing", status: "planning", priority: "low" } }, (e) => assert.ok(e.fieldErrors.clientId));
   fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", memberIds: ["usr_intruder"] } });
   fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", startDate: "2026-05-02", deadline: "2026-05-01" } }, (e) => assert.ok(e.fieldErrors.deadline));
+  fails({ type: "project.create", data: { name: "P", status: "planning", priority: "low", deadline: "2026-02-31" } }, (e) => assert.equal(e.fieldErrors.deadline, "Use a valid date"));
   project = run({ type: "project.create", data: { name: "Launch", clientId: client._id, status: "in_progress", priority: "high", memberIds: [SEED_OWNER_ID] } });
   assert.equal(project.clientId, client._id);
 });

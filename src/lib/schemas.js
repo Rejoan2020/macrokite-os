@@ -22,7 +22,8 @@ const optionalId = z
 const isoDate = z
   .string()
   .trim()
-  .refine((v) => v === "" || (/^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v))), "Use a valid date")
+  // Round-trip check rejects impossible dates such as 2026-02-31, which Date would roll over.
+  .refine((v) => v === "" || (/^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v)), "Use a valid date")
   .nullish()
   .transform((v) => v || "");
 

@@ -19,20 +19,37 @@ const newId = (prefix) => `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 1
 
 async function seedDatabase() {
   const seed = buildSeed(new Date());
-  await Organization.create(seed.org);
   for (const user of seed.users) {
     await User.updateOne({ _id: user._id }, { $setOnInsert: user }, { upsert: true });
   }
   for (const [collection, Model] of Object.entries(COLLECTION_MODELS)) {
     if (seed[collection].length) await Model.insertMany(seed[collection], { ordered: false });
   }
+  // Created last: the workspace only becomes visible once its records exist.
+  await Organization.create(seed.org);
+}
+
+const isDuplicateKey = (error) => error?.code === 11000 || error?.writeErrors?.every?.((e) => e.code === 11000);
+
+// Concurrent first requests share one seeding run; another process seeding at the same time
+// surfaces as duplicate keys, which is safe to ignore.
+let seeding = null;
+function seedOnce() {
+  seeding ??= seedDatabase()
+    .catch((error) => {
+      if (!isDuplicateKey(error)) throw error;
+    })
+    .finally(() => {
+      seeding = null;
+    });
+  return seeding;
 }
 
 async function resolveContext() {
   await connectToDatabase();
   let org = await Organization.findOne({ slug: ORG_SLUG() }).lean();
   if (!org && ORG_SLUG() === "macrokite") {
-    await seedDatabase();
+    await seedOnce();
     org = await Organization.findOne({ slug: ORG_SLUG() }).lean();
   }
   if (!org) throw new DomainError(`Workspace “${ORG_SLUG()}” does not exist.`, { status: 404 });

@@ -11,7 +11,7 @@ import { Avatar, Badge, Button, Card, cx, EmptyState, IconButton, StatusBadge } 
 import { SearchInput, Segmented } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { ConversationSummary, useMessageAuthor } from "@/components/inbox/ConversationSummary";
-import { conversationsSorted, isUnread, matches } from "@/lib/selectors";
+import { conversationsSorted, isUnread, matches, todayISO } from "@/lib/selectors";
 import { formatDate, formatTime } from "@/lib/format";
 
 export function InboxView() {
@@ -107,7 +107,7 @@ export function InboxView() {
 }
 
 function Thread({ conversation }) {
-  const { data, lookup, currentUserId, dispatch } = useWorkspace();
+  const { data, lookup, currentUserId, dispatch, preferences } = useWorkspace();
   const router = useRouter();
   const authorOf = useMessageAuthor();
   const send = useAction();
@@ -192,15 +192,16 @@ function Thread({ conversation }) {
       <ol className="min-h-0 flex-1 overflow-y-auto px-4 py-4" aria-label="Messages">
         {messages.map((m, i) => {
           const author = authorOf(m, conversation);
-          const day = m.createdAt.slice(0, 10);
-          const showDay = i === 0 || messages[i - 1].createdAt.slice(0, 10) !== day;
+          // Group by the viewer's local calendar day (timestamps are stored in UTC).
+          const day = todayISO(new Date(m.createdAt));
+          const showDay = i === 0 || todayISO(new Date(messages[i - 1].createdAt)) !== day;
           const mine = !author.isClient && m.authorId === currentUserId;
           return (
             <li key={m._id}>
               {showDay && (
                 <div className="my-3 flex items-center gap-3 text-[11px] text-subtle" role="separator">
                   <span className="h-px flex-1 bg-border" />
-                  {formatDate(m.createdAt)}
+                  {formatDate(day, preferences.dateFormat)}
                   <span className="h-px flex-1 bg-border" />
                 </div>
               )}
