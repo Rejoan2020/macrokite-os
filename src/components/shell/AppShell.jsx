@@ -9,6 +9,7 @@ import { OverlayProvider } from "@/components/providers/OverlayProvider";
 import { Avatar, Button, CountBadge, cx, Spinner } from "@/components/ui/primitives";
 import { isOpenTask } from "@/lib/selectors";
 import { Logo } from "./Logo";
+import { OnboardingScreen, SignOutButton } from "./AccountScreens";
 
 const NAV = [
   [
@@ -31,6 +32,7 @@ export function AppShell({ children }) {
   const { status, error, reload } = useWorkspace();
 
   if (status === "loading") return <BootScreen />;
+  if (status === "onboarding") return <OnboardingScreen />;
   if (status === "error") {
     return (
       <div className="flex min-h-dvh items-center justify-center p-6">
@@ -192,13 +194,16 @@ function Sidebar() {
         ))}
       </nav>
 
-      <Link href="/settings" className="mt-4 flex items-center gap-2.5 rounded-lg p-2 hover:bg-hover">
-        <Avatar user={currentUser} size="sm" />
-        <span className="min-w-0">
-          <span className="block truncate text-[13px] text-fg">{currentUser?.name}</span>
-          <span className="block truncate text-[11px] text-faint">{mode === "demo" ? "Demo data in this browser" : "Signed in via server config"}</span>
-        </span>
-      </Link>
+      <div className="mt-4 flex items-center gap-1">
+        <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 hover:bg-hover">
+          <Avatar user={currentUser} size="sm" />
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] text-fg">{currentUser?.name}</span>
+            <span className="block truncate text-[11px] text-faint">{mode === "demo" ? "Demo data in this browser" : currentUser?.email}</span>
+          </span>
+        </Link>
+        {mode === "database" && <SignOutButton compact className="size-9 shrink-0 justify-center hover:bg-hover" />}
+      </div>
     </div>
   );
 }

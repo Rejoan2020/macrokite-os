@@ -303,7 +303,7 @@ function InviteForm({ onClose }) {
   const [email, setEmail] = useState("");
   const submit = async (e) => {
     e.preventDefault();
-    if (await run({ type: "member.invite", data: { email } }, { success: "Invite sent", successDescription: email })) onClose();
+    if (await run({ type: "member.invite", data: { email } }, { success: "Invite added", successDescription: `${email} joins when they sign in` })) onClose();
   };
   return (
     <Dialog
@@ -311,12 +311,12 @@ function InviteForm({ onClose }) {
       onClose={onClose}
       size="sm"
       title="Invite member"
-      description="They join as a member. You can change their role later."
-      footer={<FormFooter formId="invite-form" busy={busy} label="Send invite" onClose={onClose} />}
+      description="They join as a member the first time they sign in with this email. Send them the app link yourself; invite emails aren’t sent yet."
+      footer={<FormFooter formId="invite-form" busy={busy} label="Add invite" onClose={onClose} />}
     >
       <form id="invite-form" onSubmit={submit} noValidate>
         <Field label="Email" error={fieldErrors.email}>
-          {(p) => <Input {...p} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@macrokite.dev" data-autofocus />}
+          {(p) => <Input {...p} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" data-autofocus />}
         </Field>
       </form>
     </Dialog>

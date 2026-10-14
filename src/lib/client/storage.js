@@ -62,6 +62,10 @@ async function call(method, url, body) {
     throw new DomainError("Network error — check your connection and try again.", { status: 0 });
   }
   const payload = await response.json().catch(() => ({}));
+  // Session ended (signed out elsewhere, or expired): go through sign-in. A full page load, since
+  // the sign-in route redirects to WorkOS.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  if (response.status === 401) window.location.assign("/auth/sign-in");
   if (!response.ok) {
     throw new DomainError(payload.error || `Request failed (${response.status}).`, { status: response.status, fieldErrors: payload.fieldErrors });
   }
@@ -76,5 +80,11 @@ export const databaseAdapter = {
   },
 };
 
-/** Asks the server which storage mode is configured; returns database data when available. */
+/**
+ * Asks the server which storage mode is configured. In database mode the reply has the signed-in
+ * account and either the workspace (status "member") or what to do first (status "onboarding").
+ */
 export const fetchWorkspace = () => call("GET", "/api/workspace");
+
+/** Starts a workspace with the signed-in account as admin (database mode). */
+export const createWorkspace = (name) => call("POST", "/api/workspace", { name });

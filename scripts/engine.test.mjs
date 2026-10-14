@@ -5,6 +5,7 @@ import { buildSeed, SEED_ORG_ID, SEED_OWNER_ID } from "../src/lib/seed.js";
 import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/lib/selectors.js";
 import { addDaysISO, todayISO } from "../src/lib/format.js";
 import { parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
+import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership } from "../src/lib/membership.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -203,6 +204,46 @@ test("text parsing: action items, days, mentions, links", () => {
   assert.equal(socialLink("https://www.instagram.com/p/abc/").platform, "Instagram");
   assert.equal(socialLink("https://m.facebook.com/x/posts/1").platform, "Facebook");
   assert.equal(socialLink("https://example.com"), null);
+});
+
+test("sign-in accounts map to members safely", () => {
+  const verified = { id: "user_01", email: "sara@acme.dev", emailVerified: true, name: "Sara Rahman", avatarUrl: "" };
+  const members = [
+    { _id: "usr_a", orgId: "org_a", email: "sara@acme.dev", authId: null, active: true, createdAt: "2026-02-01" },
+    { _id: "usr_b", orgId: "org_b", email: "other@acme.dev", authId: "user_01", active: true, createdAt: "2026-01-01" },
+    { _id: "usr_c", orgId: "org_c", email: "sara@acme.dev", authId: "user_99", active: true, createdAt: "2025-01-01" },
+  ];
+  assert.deepEqual(matchMembers(members, verified).map((u) => u._id), ["usr_a", "usr_b"], "an account linked to someone else never matches by email");
+  assert.deepEqual(matchMembers(members, { ...verified, emailVerified: false }).map((u) => u._id), ["usr_b"], "unverified email only matches by account id");
+  assert.equal(pickMembership(matchMembers(members, verified))._id, "usr_b", "oldest active membership opens first");
+  assert.equal(pickMembership([{ ...members[0], active: false }]), null, "removed members get no workspace");
+
+  assert.equal(canCreateWorkspace(verified, ""), false, "nobody may create workspaces by default");
+  assert.equal(canCreateWorkspace(verified, " Sara@Acme.dev , boss@acme.dev"), true);
+  assert.equal(canCreateWorkspace(verified, "*"), true);
+  assert.equal(canCreateWorkspace({ ...verified, emailVerified: false }, "*"), false, "creating needs a verified email");
+});
+
+test("a new workspace is usable by its creator", () => {
+  const identity = { id: "user_02", email: "Founder@Startup.io", emailVerified: true, name: "", avatarUrl: "" };
+  let k = 0;
+  const wid = (p) => `${p}_w${++k}`;
+  const built = newWorkspace({ name: "  Startup Co ", identity, now: new Date(), newId: wid, slugSuffix: "a1b2c3" });
+  assert.equal(built.org.slug, "startup-co-a1b2c3");
+  const [owner] = built.users;
+  assert.equal(owner.role, "admin");
+  assert.equal(owner.email, "founder@startup.io");
+  assert.equal(owner.name, "founder", "falls back to the email name");
+  assert.equal(owner.authId, "user_02");
+  assert.ok(newWorkspace({ name: "  ", identity, now: new Date(), newId: wid }).error, "name is required");
+
+  const snapshot = { ...Object.fromEntries(COLLECTIONS.map((c) => [c, []])), ...built };
+  const wctx = { orgId: built.org._id, userId: owner._id, now: new Date(), newId: wid };
+  const general = built.conversations.find((c) => c.type === "general");
+  const { state: next } = applyAction(snapshot, { type: "message.create", id: general._id, data: { body: "Hello team" } }, wctx);
+  assert.equal(next.messages.length, 1);
+  applyAction(next, { type: "task.create", data: { projectId: built.projects[0]._id, title: "Set up billing" } }, wctx);
+  applyAction(next, { type: "member.invite", data: { email: "cto@startup.io" } }, wctx);
 });
 
 console.log("\nall engine checks passed");

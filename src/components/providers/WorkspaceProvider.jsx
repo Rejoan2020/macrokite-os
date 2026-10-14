@@ -9,15 +9,22 @@ const WorkspaceContext = createContext(null);
 /** Database mode when the server has MongoDB configured; otherwise browser demo storage. */
 async function resolveWorkspace() {
   const server = await fetchWorkspace();
-  if (server.mode === "database") return { mode: "database", currentUserId: server.currentUserId, data: server.data };
+  if (server.mode === "database") return fromServer(server);
   const local = demoAdapter.load();
-  return { mode: "demo", currentUserId: local.currentUserId, data: local.data };
+  return { mode: "demo", status: "ready", currentUserId: local.currentUserId, data: local.data, account: null, onboarding: null };
+}
+
+function fromServer({ status, account, currentUserId, data, removed, canCreate }) {
+  if (status === "member") return { mode: "database", status: "ready", currentUserId, data, account, onboarding: null };
+  return { mode: "database", status: "onboarding", currentUserId: null, data: null, account, onboarding: { removed, canCreate } };
 }
 
 export function WorkspaceProvider({ children }) {
-  const [status, setStatus] = useState("loading"); // loading | ready | error
+  const [status, setStatus] = useState("loading"); // loading | ready | onboarding | error
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null);
+  const [account, setAccount] = useState(null); // signed-in account (database mode)
+  const [onboarding, setOnboarding] = useState(null); // { removed, canCreate } when not in a workspace
   const [data, setData] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
   const stateRef = useRef(null);
@@ -29,12 +36,14 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const applyLoaded = useCallback(
-    ({ mode, currentUserId, data }) => {
+    ({ mode, status, currentUserId, data, account, onboarding }) => {
       setMode(mode);
+      setAccount(account);
+      setOnboarding(onboarding);
       setCurrentUserId(currentUserId);
       commit(data);
       setError(null);
-      setStatus("ready");
+      setStatus(status);
     },
     [commit]
   );
@@ -88,9 +97,12 @@ export function WorkspaceProvider({ children }) {
     if (mode !== "database") return Promise.resolve();
     return enqueue(async () => {
       const server = await fetchWorkspace();
-      if (server.mode === "database") commit(server.data);
+      if (server.mode !== "database") return;
+      // Removed from the workspace mid-session: show the onboarding screen instead.
+      if (server.status === "member") commit(server.data);
+      else applyLoaded(fromServer(server));
     }).catch(() => {});
-  }, [enqueue, mode, commit]);
+  }, [enqueue, mode, commit, applyLoaded]);
 
   const resetDemo = useCallback(() => {
     if (mode !== "demo") return;
@@ -100,7 +112,7 @@ export function WorkspaceProvider({ children }) {
   }, [mode, commit]);
 
   const value = useMemo(() => {
-    if (!data) return { status, error, mode, reload: load };
+    if (!data) return { status, error, mode, account, onboarding, reload: load };
     const users = indexById(data.users);
     const general = data.conversations.find((c) => c.type === "general");
     const projectChats = {};
@@ -114,6 +126,7 @@ export function WorkspaceProvider({ children }) {
       status,
       error,
       mode,
+      account,
       reload: load,
       data,
       dispatch,
@@ -133,7 +146,7 @@ export function WorkspaceProvider({ children }) {
         messages: indexById(data.messages),
       },
     };
-  }, [data, status, error, mode, load, dispatch, refresh, resetDemo, currentUserId]);
+  }, [data, status, error, mode, account, onboarding, load, dispatch, refresh, resetDemo, currentUserId]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
