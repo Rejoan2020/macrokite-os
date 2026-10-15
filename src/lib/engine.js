@@ -89,7 +89,7 @@ function createTx(snapshot, ctx) {
       if (userId === ctx.userId) return;
       const user = state.users.find((u) => u._id === userId);
       if (!user?.active) return;
-      tx.create("notifications", "ntf", { userId, type, targetType, targetId, text, readAt: null, createdAt: now });
+      tx.create("notifications", "ntf", { userId, actorId: ctx.userId, type, targetType, targetId, text, readAt: null, createdAt: now });
     },
   };
   return tx;
@@ -363,6 +363,11 @@ const handlers = {
     const n = tx.find("notifications", id, "Notification");
     if (n.userId !== ctx.userId) throw new DomainError("Notification not found.", { status: 404 });
     return tx.put("notifications", { ...n, readAt: n.readAt ?? tx.now });
+  },
+  "notification.readAll"(tx, ctx) {
+    const unread = tx.state.notifications.filter((n) => n.userId === ctx.userId && !n.readAt);
+    for (const n of unread) tx.put("notifications", { ...n, readAt: tx.now });
+    return { count: unread.length };
   },
 
   // ------------------------------------------------------------------- team

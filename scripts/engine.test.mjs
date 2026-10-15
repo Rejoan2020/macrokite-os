@@ -4,9 +4,10 @@ import { applyAction, applyChanges, COLLECTIONS, DomainError } from "../src/lib/
 import { buildSeed, SEED_ORG_ID, SEED_OWNER_ID } from "../src/lib/seed.js";
 import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/lib/selectors.js";
 import { addDaysISO, todayISO } from "../src/lib/format.js";
-import { parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
+import { mentionHandle, mentionSuggestions, parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
 import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember } from "../src/lib/membership.js";
 import { notificationEmails } from "../src/lib/emails.js";
+import { myNotifications } from "../src/lib/notifications.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -205,6 +206,47 @@ test("text parsing: action items, days, mentions, links", () => {
   assert.equal(socialLink("https://www.instagram.com/p/abc/").platform, "Instagram");
   assert.equal(socialLink("https://m.facebook.com/x/posts/1").platform, "Facebook");
   assert.equal(socialLink("https://example.com"), null);
+});
+
+test("notification list: who, what, where, and mark all read", () => {
+  let inbox = buildSeed(new Date());
+  let k = 0;
+  const act = (action, userId = SEED_OWNER_ID) => {
+    const out = applyAction(inbox, action, { orgId: SEED_ORG_ID, userId, now: new Date(Date.now() + ++k * 1000), newId: (p) => `${p}_n${k}` });
+    inbox = out.state;
+    return out.result;
+  };
+  const before = myNotifications(inbox, "usr_sara").length;
+  act({ type: "message.create", id: "cnv_jajabor", data: { body: "@Sara review please" } });
+  act({ type: "task.create", data: { title: "Fix login", projectId: "prj_jajabor", assigneeId: "usr_sara" } });
+  const mine = myNotifications(inbox, "usr_sara");
+  assert.equal(mine.length, before + 2);
+  assert.deepEqual(mine[0].view, { actorId: "usr_alex", text: "Alex Morgan assigned you a task", detail: "Fix login", href: "/tasks" }, "newest first");
+  assert.equal(mine[1].view.text, "Alex Morgan mentioned you in # Jajabor");
+  assert.equal(mine[1].view.href, "/projects/prj_jajabor?tab=chat");
+  assert.equal(mine[0].actorId, "usr_alex", "notifications record who caused them");
+
+  assert.ok(mine.some((n) => !n.readAt));
+  act({ type: "notification.readAll" }, "usr_sara");
+  assert.ok(myNotifications(inbox, "usr_sara").every((n) => n.readAt));
+  assert.ok(inbox.notifications.some((n) => n.userId !== "usr_sara" && !n.readAt), "only your own are marked read");
+});
+
+test("mention suggestions and picked names resolve to the right person", () => {
+  const people = [
+    { _id: "u1", name: "Rafi Ahmed" },
+    { _id: "u2", name: "Rina Das" },
+    { _id: "u3", name: "Sara Rahman" },
+    { _id: "u4", name: "Rafi Karim" },
+  ];
+  assert.deepEqual(mentionSuggestions("r", people).map((u) => u._id), ["u1", "u2", "u3", "u4"], "first or last name");
+  assert.deepEqual(mentionSuggestions("ri", people).map((u) => u._id), ["u2"]);
+  assert.deepEqual(mentionSuggestions("", people).length, 4, "a bare @ lists everyone");
+  assert.equal(mentionHandle(people[1], people), "Rina");
+  assert.equal(mentionHandle(people[0], people), "RafiAhmed", "shared first names use the full name");
+  for (const user of people) {
+    assert.deepEqual(parseMentions(`hey @${mentionHandle(user, people)} check this`, people), [user._id]);
+  }
 });
 
 test("deleting a member keeps history as Former member, and a new invite brings them back", () => {

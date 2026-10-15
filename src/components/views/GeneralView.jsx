@@ -8,7 +8,7 @@ import { pluralize } from "@/lib/format";
 export const chatHeight = "h-[calc(100dvh-3.5rem)] lg:h-dvh";
 
 export function GeneralView() {
-  const { data, chats, activeUsers } = useWorkspace();
+  const { data, chats, activeUsers, currentUserId } = useWorkspace();
   const conversation = chats.general;
   const messages = conversation ? conversationMessages(data, conversation._id) : [];
   const send = useSendMessage(conversation?._id);
@@ -35,7 +35,7 @@ export function GeneralView() {
 
       <div className="border-t border-divider px-4 pt-4 pb-6 sm:px-8">
         <div className="mx-auto max-w-[760px]">
-          <Composer label="Message General" placeholder="Message # General" onSend={send} hint="Paste a Facebook or Instagram link to share a post · @ to mention someone" />
+          <Composer label="Message General" placeholder="Message # General" onSend={send} people={activeUsers.filter((u) => u._id !== currentUserId)} hint="Paste a Facebook or Instagram link to share a post · @ to mention someone" />
         </div>
       </div>
     </div>

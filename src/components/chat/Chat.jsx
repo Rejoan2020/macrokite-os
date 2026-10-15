@@ -1,13 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ListPlus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useAction } from "@/lib/client/useAction";
 import { Avatar, Button, cx, DayDivider } from "@/components/ui/primitives";
 import { formatDay, formatTime, todayISO } from "@/lib/format";
-import { socialLinks, tokenize } from "@/lib/text";
+import { mentionHandle, mentionSuggestions, socialLinks, tokenize } from "@/lib/text";
 
 /** Marks a conversation read whenever it is on screen with unread messages. */
 export function useMarkRead(conversationId) {
@@ -160,11 +160,24 @@ export function ChannelMessage({ message, onCreateTask }) {
   );
 }
 
-/** Message input: Enter sends, Shift+Enter adds a line. */
-export function Composer({ placeholder, label, onSend, hint, compact }) {
+/** The "@query" the caret is in, if any: { start, query }. */
+function mentionAt(text, caret) {
+  const match = /(^|[^\w@])@([\w.-]*)$/.exec(text.slice(0, caret));
+  return match ? { start: caret - match[2].length - 1, query: match[2] } : null;
+}
+
+/**
+ * Message input: Enter sends, Shift+Enter adds a line. Typing @ suggests `people` (the people who
+ * can be mentioned here); arrows move, Enter or Tab picks, Escape closes.
+ */
+export function Composer({ placeholder, label, onSend, hint, compact, people = [] }) {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState(null);
   const ref = useRef(null);
+  const listId = useId();
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -173,6 +186,26 @@ export function Composer({ placeholder, label, onSend, hint, compact }) {
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [body]);
 
+  const mention = people.length ? mentionAt(body, caret) : null;
+  const suggestions = mention && mention.start !== dismissedAt ? mentionSuggestions(mention.query, people) : [];
+  const open = suggestions.length > 0;
+  const active = Math.min(highlight, suggestions.length - 1);
+
+  const trackCaret = (e) => setCaret(e.currentTarget.selectionStart);
+
+  const pick = (user) => {
+    const insert = `@${mentionHandle(user, people)} `;
+    const next = body.slice(0, mention.start) + insert + body.slice(caret);
+    const position = mention.start + insert.length;
+    setBody(next);
+    setCaret(position);
+    setHighlight(0);
+    requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.setSelectionRange(position, position);
+    });
+  };
+
   const send = async (e) => {
     e?.preventDefault();
     const text = body.trim();
@@ -180,23 +213,78 @@ export function Composer({ placeholder, label, onSend, hint, compact }) {
     setSending(true);
     const ok = await onSend(text);
     setSending(false);
-    if (ok) setBody("");
+    if (ok) {
+      setBody("");
+      setCaret(0);
+    }
     ref.current?.focus();
   };
 
+  const onKeyDown = (e) => {
+    if (open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setHighlight((active + step + suggestions.length) % suggestions.length);
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        pick(suggestions[active]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDismissedAt(mention.start);
+        return;
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) send(e);
+  };
+
   return (
-    <form onSubmit={send} className="flex flex-col gap-2">
+    <form onSubmit={send} className="relative flex flex-col gap-2">
+      {open && (
+        <ul id={listId} role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line bg-card py-1 shadow-lg">
+          {suggestions.map((user, i) => (
+            <li
+              key={user._id}
+              id={`${listId}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              // Keeps focus in the textarea so the caret position is kept.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => pick(user)}
+              onMouseEnter={() => setHighlight(i)}
+              className={cx("flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px]", i === active ? "bg-hover text-strong" : "text-secondary")}
+            >
+              <Avatar user={user} size="sm" />
+              <span className="truncate">{user.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <label className={cx("flex items-end gap-2.5 border border-dash bg-card", compact ? "rounded-[10px] p-2 pl-3.5" : "rounded-xl p-2.5 pl-4")}>
         <span className="sr-only">{label}</span>
         <textarea
           ref={ref}
           rows={1}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) send(e);
+          onChange={(e) => {
+            setBody(e.target.value);
+            trackCaret(e);
+            setHighlight(0);
           }}
+          onSelect={trackCaret}
+          onBlur={() => mention && setDismissedAt(mention.start)}
+          onFocus={() => setDismissedAt(null)}
+          onKeyDown={onKeyDown}
           placeholder={placeholder}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-activedescendant={open ? `${listId}-${active}` : undefined}
           className="min-w-0 flex-1 resize-none bg-transparent py-2.5 leading-normal text-fg outline-none placeholder:text-muted"
         />
         <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!body.trim()} className={compact ? "h-10" : ""}>

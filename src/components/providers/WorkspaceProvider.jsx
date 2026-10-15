@@ -157,6 +157,21 @@ export function useWorkspace() {
   return ctx;
 }
 
+/**
+ * Keeps every page current (database mode): polls every 30 seconds while the tab is visible, and
+ * right away when you come back to the tab. Open chats poll faster with useLiveUpdates.
+ */
+export function useBackgroundRefresh(intervalMs = 30_000) {
+  const { mode, refresh } = useWorkspace();
+  useLiveUpdates(true, intervalMs);
+  useEffect(() => {
+    if (mode !== "database") return;
+    const onVisible = () => document.visibilityState === "visible" && refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [mode, refresh]);
+}
+
 /** Polls the server every few seconds while a chat is open (database mode only). */
 export function useLiveUpdates(active = true, intervalMs = 4000) {
   const { mode, refresh } = useWorkspace();
