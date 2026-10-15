@@ -3,7 +3,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { applyAction, DomainError } from "../engine";
 import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember } from "../membership";
 import { SCHEMA_VERSION } from "../seed";
+import { notificationEmails } from "../emails";
 import { connectToDatabase } from "./db";
+import { appUrl } from "./email";
 import { revokeInviteEmail, sendInviteEmail } from "./invitations";
 import { COLLECTION_MODELS, Conversation, Invite, Organization, Project, User } from "./models";
 
@@ -168,10 +170,12 @@ export function runAction(identity, action) {
     const account = await resolveAccount(identity);
     if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
     const snapshot = await loadSnapshot(account.orgId);
-    const { changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now: new Date(), newId });
+    const now = new Date();
+    const { state, changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now, newId });
     const delivered = await deliverInviteEmail(identity, snapshot, account.userId, action, changes, result);
     await persistChanges(snapshot.org, changes);
-    return { result: delivered, changes };
+    const emails = notificationEmails({ state, changes, action, actorId: account.userId, now, appUrl, timeZone: process.env.MACROKITE_TIME_ZONE });
+    return { result: delivered, changes, emails };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});

@@ -21,13 +21,12 @@ export const TASK_SOURCES = ["manual", "meeting", "message"];
 export const CONVERSATION_TYPES = ["project", "general", "dm"];
 export const NOTIFICATION_TYPES = ["mention", "assignment", "meetingInvite", "dm"];
 
+// Email notifications. Mentions and direct messages are in-app only.
 export const NOTIFICATION_PREFS = [
-  { key: "mention", label: "Someone @mentions me", hint: "In project chats, General or messages" },
   { key: "assignment", label: "A task is assigned to me", hint: "Includes action items from meetings" },
-  { key: "meetingInvite", label: "I’m invited to a meeting", hint: "Plus a reminder before it starts" },
-  { key: "dm", label: "New direct message", hint: "Only when I’m away from the app" },
+  { key: "meetingInvite", label: "Meetings I’m invited to", hint: "The invite, and its decisions and action items when it ends" },
 ];
-export const DEFAULT_NOTIFICATION_PREFS = { mention: true, assignment: true, meetingInvite: true, dm: false };
+export const DEFAULT_NOTIFICATION_PREFS = { assignment: true, meetingInvite: true };
 
 // Shown wherever a deleted member appears in history.
 export const FORMER_MEMBER = "Former member";

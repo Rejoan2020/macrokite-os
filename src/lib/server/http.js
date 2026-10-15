@@ -1,8 +1,9 @@
 import "server-only";
-import { connection } from "next/server";
+import { after, connection } from "next/server";
 import { ACTION_TYPES, DomainError } from "../engine";
 import { requireIdentity } from "./auth";
 import { isDatabaseConfigured } from "./db";
+import { sendEmails } from "./email";
 import { createWorkspace, runAction } from "./repository";
 
 export const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -76,7 +77,9 @@ export const handleAction = (request) =>
     if (body.data !== undefined && (typeof body.data !== "object" || body.data === null || Array.isArray(body.data))) {
       throw new DomainError("Action data must be an object.");
     }
-    const { result, changes } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
+    const { result, changes, emails } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
+    // Sent after the response, so a slow mail server never delays the app.
+    after(() => sendEmails(emails));
     return { result, changes };
   });
 

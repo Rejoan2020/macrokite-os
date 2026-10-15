@@ -1,6 +1,7 @@
 import "server-only";
 import { getWorkOS } from "@workos-inc/authkit-nextjs";
-import { appUrl, escapeHtml, isEmailConfigured, sendEmail } from "./email";
+import { escapeHtml } from "../emails";
+import { appUrl, isEmailConfigured, sendEmail } from "./email";
 
 /**
  * Invite emails. WorkOS sends them first; when it can't (it won't email someone who already has an

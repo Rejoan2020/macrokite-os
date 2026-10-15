@@ -29,11 +29,15 @@ export async function sendEmail({ to, subject, text, html }) {
   await getTransport().sendMail({ from: env("EMAIL_FROM") || env("SMTP_USER"), to, subject, text, html });
 }
 
+/** Sends a batch without failing the caller; each failure is logged. */
+export async function sendEmails(emails) {
+  if (!emails.length || !isEmailConfigured()) return;
+  const results = await Promise.allSettled(emails.map(sendEmail));
+  results.forEach((r, i) => r.status === "rejected" && console.error("[email] to", emails[i].to, r.reason));
+}
+
 /** The deployment's own address, taken from the sign-in callback URL (as sign-out does). */
 export function appUrl(path = "/") {
   const redirectUri = env("NEXT_PUBLIC_WORKOS_REDIRECT_URI");
   return redirectUri ? new URL(path, redirectUri).href : null;
 }
-
-export const escapeHtml = (value) =>
-  String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

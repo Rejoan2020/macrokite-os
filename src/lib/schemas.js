@@ -85,10 +85,8 @@ export const profileInput = z.object({
   name: required("Name", 80),
   avatarUrl: httpUrl("Photo"),
   notificationPrefs: z.object({
-    mention: z.boolean(),
     assignment: z.boolean(),
     meetingInvite: z.boolean(),
-    dm: z.boolean(),
   }),
 });
 
