@@ -10,7 +10,7 @@ import {
   taskInput,
   workspaceInput,
 } from "./schemas";
-import { nextPhase, phaseLabel } from "./constants";
+import { FORMER_MEMBER, nextPhase, phaseLabel } from "./constants";
 import { parseMentions } from "./text";
 import { conversationMemberIds, readStateId } from "./selectors";
 import { pluralize } from "./format";
@@ -99,9 +99,10 @@ function requireAdmin(tx) {
   if (tx.me()?.role !== "admin") throw new DomainError("Only admins can do that.", { status: 403 });
 }
 
-function activeUserIds(tx, ids, field) {
+/** Checks that people being added are active members. Ids in `kept` were already there and may stay. */
+function activeUserIds(tx, ids, field, kept = []) {
   const active = new Set(tx.state.users.filter((u) => u.active).map((u) => u._id));
-  const unknown = ids.find((id) => !active.has(id));
+  const unknown = ids.find((id) => !active.has(id) && !kept.includes(id));
   if (unknown) throw new DomainError("Pick people who are on the team.", { fieldErrors: { [field]: "Someone selected is not an active team member" } });
   return ids;
 }
@@ -172,7 +173,7 @@ const handlers = {
   "project.update"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
     const input = parse(projectInput, { ...current, ...data });
-    const memberIds = activeUserIds(tx, input.memberIds, "memberIds");
+    const memberIds = activeUserIds(tx, input.memberIds, "memberIds", current.memberIds);
     if (!memberIds.length) throw new DomainError("A project needs at least one member.", { fieldErrors: { memberIds: "Add at least one member" } });
     const project = tx.put("projects", { ...current, ...input, memberIds, updatedAt: tx.now });
     const conversation = conversationFor(tx, id);
@@ -223,7 +224,7 @@ const handlers = {
     const current = tx.find("tasks", id, "Task");
     const input = parse(taskInput, { ...current, ...data });
     findProject(tx, input.projectId);
-    activeUserIds(tx, [input.assigneeId], "assigneeId");
+    activeUserIds(tx, [input.assigneeId], "assigneeId", [current.assigneeId]);
     const task = tx.put("tasks", {
       ...current,
       ...input,
@@ -268,7 +269,7 @@ const handlers = {
     const current = tx.find("meetings", id, "Meeting");
     const input = parse(meetingInput, { ...current, ...data });
     findProject(tx, input.projectId);
-    activeUserIds(tx, input.attendeeIds, "attendeeIds");
+    activeUserIds(tx, input.attendeeIds, "attendeeIds", current.attendeeIds);
     if (input.projectId !== current.projectId && tx.state.tasks.some((t) => t.meetingId === id)) {
       throw new DomainError("This meeting already has action items, so its project can’t change.", { fieldErrors: { projectId: "Fixed once action items exist" } });
     }
@@ -368,7 +369,8 @@ const handlers = {
   "member.invite"(tx, ctx, { data }) {
     requireAdmin(tx);
     const { email } = parse(inviteInput, data);
-    if (tx.state.users.some((u) => u.email === email)) throw new DomainError("That person is already on the team.", { fieldErrors: { email: "Already on the team" } });
+    // A deleted member's record is kept for history; inviting the same email brings them back to it.
+    if (tx.state.users.some((u) => u.email === email && !u.deletedAt)) throw new DomainError("That person is already on the team.", { fieldErrors: { email: "Already on the team" } });
     if (tx.state.invites.some((i) => i.email === email && !i.acceptedAt)) throw new DomainError("That email already has a pending invite.", { fieldErrors: { email: "Already invited" } });
     return tx.create("invites", "inv", { email, invitedBy: ctx.userId, createdAt: tx.now, sentAt: tx.now, acceptedAt: null });
   },
@@ -394,7 +396,43 @@ const handlers = {
     requireAdmin(tx);
     if (id === ctx.userId) throw new DomainError("You can’t remove yourself.");
     const user = tx.find("users", id, "Member");
+    if (user.deletedAt) throw new DomainError("This member was deleted. Invite them again instead.");
     return tx.put("users", { ...user, active: Boolean(data?.active), updatedAt: tx.now });
+  },
+  /**
+   * Permanently deletes a removed member. Their personal details, notifications and read state go,
+   * and they leave every project. A nameless record stays so tasks, messages and decisions show
+   * "Former member"; it keeps the email so a new invite to that address restores their history.
+   */
+  "member.delete"(tx, ctx, { id }) {
+    requireAdmin(tx);
+    if (id === ctx.userId) throw new DomainError("You can’t delete yourself.");
+    const user = tx.find("users", id, "Member");
+    if (user.active) throw new DomainError("Remove this member before deleting them.");
+    if (user.deletedAt) throw new DomainError("This member was already deleted.");
+    for (const project of tx.state.projects.filter((p) => p.memberIds.includes(id))) {
+      const memberIds = project.memberIds.filter((uid) => uid !== id);
+      tx.put("projects", { ...project, memberIds, updatedAt: tx.now });
+      const conversation = conversationFor(tx, project._id);
+      if (conversation) tx.put("conversations", { ...conversation, memberIds });
+    }
+    tx.remove("notifications", tx.state.notifications.filter((n) => n.userId === id).map((n) => n._id));
+    tx.remove("readStates", tx.state.readStates.filter((r) => r.userId === id).map((r) => r._id));
+    return tx.put("users", {
+      _id: user._id,
+      orgId: user.orgId,
+      authId: null,
+      name: FORMER_MEMBER,
+      email: user.email,
+      avatarUrl: "",
+      avatarColor: user.avatarColor,
+      role: "member",
+      active: false,
+      deletedAt: tx.now,
+      notificationPrefs: {},
+      createdAt: user.createdAt,
+      updatedAt: tx.now,
+    });
   },
 
   // ------------------------------------------------------ workspace/profile

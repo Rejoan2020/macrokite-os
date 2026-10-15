@@ -6,7 +6,7 @@ import { TaskRow } from "@/components/tasks/TaskRow";
 import { conversationMessages } from "@/components/chat/Chat";
 import { CountBadge, cx, OnHoldPill, Page, PageHeader, Panel, PhaseBar, Summary, TextLink } from "@/components/ui/primitives";
 import { usePersistentState } from "@/lib/client/usePersistentState";
-import { phaseIndex, phaseLabel } from "@/lib/constants";
+import { FORMER_MEMBER, phaseIndex, phaseLabel } from "@/lib/constants";
 import { firstName, formatLongDate, formatShortDate, formatTime, greeting, pluralize, todayISO } from "@/lib/format";
 import { decisionLog, isOpenTask, isOverdue, isPastDeadline, sortByDue, stillOpenFromLast } from "@/lib/selectors";
 
@@ -35,7 +35,7 @@ export function OverviewView() {
       .map(([userId, c]) => ({
         key: c._id,
         href: `/messages/${userId}`,
-        label: lookup.users[userId]?.name ?? "Former member",
+        label: lookup.users[userId]?.name ?? FORMER_MEMBER,
         preview: conversationMessages(data, c._id).at(-1)?.body,
         ...unread[c._id],
       })),

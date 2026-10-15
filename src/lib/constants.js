@@ -29,6 +29,9 @@ export const NOTIFICATION_PREFS = [
 ];
 export const DEFAULT_NOTIFICATION_PREFS = { mention: true, assignment: true, meetingInvite: true, dm: false };
 
+// Shown wherever a deleted member appears in history.
+export const FORMER_MEMBER = "Former member";
+
 export const phaseLabel = (phase) => PHASE_LABELS[phase] ?? phase;
 export const phaseIndex = (phase) => PHASES.indexOf(phase);
 export const nextPhase = (phase) => PHASES[phaseIndex(phase) + 1] ?? null;

@@ -36,6 +36,7 @@ export const User = model(
     avatarColor: String,
     role: { type: String, enum: ROLES },
     active: Boolean,
+    deletedAt: ref, // set when an admin deletes the member; the record stays as "Former member"
     notificationPrefs: Schema.Types.Mixed,
     ...timestamps,
   },

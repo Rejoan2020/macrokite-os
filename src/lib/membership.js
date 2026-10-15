@@ -33,11 +33,11 @@ export function avatarColorFor(key) {
 /**
  * Member records this account may act as. A record matches by authId, or by verified email when it
  * has never been linked (invited or pre-existing members). A record linked to a different account
- * never matches, even with the same email.
+ * never matches, even with the same email. Deleted members never match; only a new invite revives them.
  */
 export function matchMembers(users, identity) {
   const email = normalizeEmail(identity.email);
-  return users.filter((u) => (u.authId ? u.authId === identity.id : identity.emailVerified && u.email === email));
+  return users.filter((u) => !u.deletedAt && (u.authId ? u.authId === identity.id : identity.emailVerified && u.email === email));
 }
 
 /** Picks the workspace to open: the oldest active membership. */
@@ -75,6 +75,15 @@ export function newMember({ orgId, identity, role, now, newId }) {
     createdAt: at,
     updatedAt: at,
   };
+}
+
+/**
+ * A deleted member accepting a new invite: the same record (and so the same id in every task,
+ * message and decision) comes back with this account's details as a regular member.
+ */
+export function rejoinedMember(deleted, { identity, now, newId }) {
+  const { _id, createdAt, ...fresh } = newMember({ orgId: deleted.orgId, identity, role: "member", now, newId });
+  return { ...deleted, ...fresh, deletedAt: null };
 }
 
 export function slugify(name, suffix) {

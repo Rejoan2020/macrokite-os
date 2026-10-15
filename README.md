@@ -49,6 +49,7 @@ How accounts map to workspaces:
 - Every page and API call needs a signed-in account. Signed-out visitors are sent to sign-in, and the API answers 401.
 - A member record is linked to the sign-in account on first sign-in, matched by **verified** email. After that, only that account can use it.
 - Workspace data is always scoped by the member's organization. Removed (deactivated) members lose access straight away.
+- An admin can then delete a removed member permanently. Their profile is erased and their history shows "Former member". The record keeps only their email, so inviting that email again brings back the same member with their history.
 - Someone with no workspace and no invite sees a "not on a team yet" screen. Only emails in `MACROKITE_WORKSPACE_CREATORS` can create workspaces; set it to `*` for open sign-up.
 - If MongoDB is configured but the WorkOS settings are missing, the app refuses to serve data rather than running without sign-in. If the database is unreachable, it shows an error with a retry button.
 
@@ -83,7 +84,7 @@ Database mode no longer seeds sample data. A database created by an earlier vers
 | `/tasks` | My tasks grouped by Overdue, Today, This week, Later and No due date, plus completed this week |
 | `/general` | Team-wide channel. Facebook and Instagram links render as cards, and `@name` mentions notify |
 | `/messages/[userId]` | One-to-one messages, with "Create task from message" |
-| `/team`, `/settings` | Invites, roles and deactivation (admins). Profile, email notification preferences, workspace name |
+| `/team`, `/settings` | Invites, roles, removing and deleting members (admins). Profile, email notification preferences, workspace name |
 
 ## Architecture
 

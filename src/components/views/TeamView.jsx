@@ -18,9 +18,10 @@ export function TeamView() {
   const overlays = useOverlays();
   const { run, busy } = useAction();
   const [removing, setRemoving] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const active = data.users.filter((u) => u.active).sort((a, b) => Number(b._id === currentUserId) - Number(a._id === currentUserId) || a.name.localeCompare(b.name));
-  const inactive = data.users.filter((u) => !u.active);
+  const inactive = data.users.filter((u) => !u.active && !u.deletedAt);
   const pending = data.invites.filter((i) => !i.acceptedAt);
   const workingOn = (userId) =>
     data.projects
@@ -31,6 +32,10 @@ export function TeamView() {
 
   const remove = async () => {
     if (await run({ type: "member.active", id: removing._id, data: { active: false } }, { success: `${removing.name} removed`, successDescription: "Their history stays in place." })) setRemoving(null);
+  };
+
+  const deleteMember = async () => {
+    if (await run({ type: "member.delete", id: deleting._id }, { success: `${deleting.name} deleted`, successDescription: "Their history now shows “Former member”." })) setDeleting(null);
   };
 
   return (
@@ -150,9 +155,14 @@ export function TeamView() {
                   History
                 </Link>
                 {isAdmin && (
-                  <button type="button" onClick={() => run({ type: "member.active", id: user._id, data: { active: true } }, { success: `${user.name} restored` })} className="text-accent hover:text-accent-light">
-                    Restore
-                  </button>
+                  <>
+                    <button type="button" onClick={() => run({ type: "member.active", id: user._id, data: { active: true } }, { success: `${user.name} restored` })} className="text-accent hover:text-accent-light">
+                      Restore
+                    </button>
+                    <button type="button" onClick={() => setDeleting(user)} className="text-faint hover:text-danger">
+                      Delete
+                    </button>
+                  </>
                 )}
               </li>
             ))}
@@ -160,7 +170,7 @@ export function TeamView() {
         </details>
       )}
 
-      <p className="text-[13px] text-muted">Admins invite people and change roles. Removing someone deactivates their account, so their tasks, messages and decisions stay in history.</p>
+      <p className="text-[13px] text-muted">Admins invite people and change roles. Removing someone deactivates their account, so their tasks, messages and decisions stay in history. Deleting a removed member erases their profile and shows them as “Former member”.</p>
 
       <ConfirmDialog
         open={!!removing}
@@ -171,6 +181,16 @@ export function TeamView() {
         title={`Remove ${removing?.name}?`}
         description="Their account is deactivated. Their tasks, messages and decisions stay in history, and an admin can restore them later."
         confirmLabel="Remove"
+      />
+      <ConfirmDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={deleteMember}
+        busy={busy}
+        tone="danger"
+        title={`Delete ${deleting?.name} permanently?`}
+        description="Their name and profile are erased, and their tasks, messages and decisions show “Former member”. If you invite the same email again, their history comes back with their name."
+        confirmLabel="Delete"
       />
     </Page>
   );

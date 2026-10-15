@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { applyAction, DomainError } from "../engine";
-import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership } from "../membership";
+import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember } from "../membership";
 import { SCHEMA_VERSION } from "../seed";
 import { connectToDatabase } from "./db";
 import { COLLECTION_MODELS, Conversation, Invite, Organization, Project, User } from "./models";
@@ -30,13 +30,24 @@ async function acceptInvites(identity) {
   const invites = await Invite.find({ email: identity.email, acceptedAt: null }).lean();
   for (const invite of invites) {
     const now = new Date();
-    const member = newMember({ orgId: invite.orgId, identity, role: "member", now, newId });
-    try {
-      await User.create(member);
-    } catch (error) {
-      // Accepted concurrently by another request, or already a member: nothing more to do here.
-      if (!isDuplicateKey(error)) throw error;
-      continue;
+    const deleted = await User.findOne({ orgId: invite.orgId, email: identity.email, deletedAt: { $ne: null } }).lean();
+    let member;
+    if (deleted) {
+      // Invited back after being deleted: revive the old record so their history shows their name again.
+      member = rejoinedMember(deleted, { identity, now, newId });
+      const { _id, ...fields } = member;
+      // Matching on deletedAt means a concurrent request can't revive the record twice.
+      const { modifiedCount } = await User.updateOne({ _id, deletedAt: { $ne: null } }, { $set: fields });
+      if (!modifiedCount) continue;
+    } else {
+      member = newMember({ orgId: invite.orgId, identity, role: "member", now, newId });
+      try {
+        await User.create(member);
+      } catch (error) {
+        // Accepted concurrently by another request, or already a member: nothing more to do here.
+        if (!isDuplicateKey(error)) throw error;
+        continue;
+      }
     }
     const internal = await Project.findOneAndUpdate(
       { orgId: invite.orgId, isInternal: true },

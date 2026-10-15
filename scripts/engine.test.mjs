@@ -5,7 +5,7 @@ import { buildSeed, SEED_ORG_ID, SEED_OWNER_ID } from "../src/lib/seed.js";
 import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/lib/selectors.js";
 import { addDaysISO, todayISO } from "../src/lib/format.js";
 import { parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
-import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership } from "../src/lib/membership.js";
+import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember } from "../src/lib/membership.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -204,6 +204,43 @@ test("text parsing: action items, days, mentions, links", () => {
   assert.equal(socialLink("https://www.instagram.com/p/abc/").platform, "Instagram");
   assert.equal(socialLink("https://m.facebook.com/x/posts/1").platform, "Facebook");
   assert.equal(socialLink("https://example.com"), null);
+});
+
+test("deleting a member keeps history as Former member, and a new invite brings them back", () => {
+  const nadia = state.users.find((u) => u._id === "usr_nadia");
+  const project = state.projects.find((p) => p.memberIds.includes("usr_nadia"));
+  const task = run({ type: "task.create", data: { title: "Hand over notes", projectId: project._id, assigneeId: "usr_nadia" } });
+  fails({ type: "member.delete", id: "usr_nadia" }, (e) => assert.match(e.message, /Remove this member/));
+  run({ type: "member.active", id: "usr_nadia", data: { active: false } });
+  fails({ type: "member.delete", id: "usr_nadia" }, (e) => assert.equal(e.status, 403), as("usr_sara"));
+  fails({ type: "member.delete", id: SEED_OWNER_ID });
+
+  const deleted = run({ type: "member.delete", id: "usr_nadia" });
+  assert.equal(deleted.name, "Former member");
+  assert.equal(deleted.email, nadia.email, "email stays so a new invite can match");
+  assert.equal(deleted.authId, null);
+  assert.ok(deleted.deletedAt);
+  assert.ok(!state.projects.some((p) => p.memberIds.includes("usr_nadia")), "leaves every project");
+  assert.ok(!state.notifications.some((n) => n.userId === "usr_nadia"));
+  assert.equal(state.tasks.find((t) => t._id === task._id).assigneeId, "usr_nadia", "history keeps the same id");
+  fails({ type: "member.active", id: "usr_nadia", data: { active: true } }, (e) => assert.match(e.message, /Invite them again/));
+  fails({ type: "member.delete", id: "usr_nadia" });
+
+  // A task still assigned to the deleted member stays editable.
+  run({ type: "task.update", id: task._id, data: { title: "Hand over all notes" } });
+  // Signing in with the old account no longer opens the workspace.
+  assert.deepEqual(matchMembers([{ ...deleted, authId: null }], { id: nadia.authId ?? "user_n", email: nadia.email, emailVerified: true }), []);
+
+  const invite = run({ type: "member.invite", data: { email: nadia.email } });
+  run({ type: "invite.cancel", id: invite._id });
+  const back = rejoinedMember(deleted, { identity: { id: "user_n2", email: nadia.email, emailVerified: true, name: "Nadia H.", avatarUrl: "" }, now: new Date(), newId: (p) => `${p}_x` });
+  assert.equal(back._id, "usr_nadia", "same record, so old tasks and messages show their name again");
+  assert.equal(back.name, "Nadia H.");
+  assert.equal(back.active, true);
+  assert.equal(back.role, "member");
+  assert.equal(back.deletedAt, null);
+  assert.equal(back.authId, "user_n2");
+  assert.equal(back.createdAt, deleted.createdAt);
 });
 
 test("sign-in accounts map to members safely", () => {
