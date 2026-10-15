@@ -232,10 +232,13 @@ test("notification list: who, what, where, and mark all read", () => {
   assert.ok(inbox.notifications.some((n) => n.userId !== "usr_sara" && !n.readAt), "only your own are marked read");
 });
 
-test("task permissions: creator and admins edit, the assignee only moves status", () => {
-  // Sara (member) creates a task for Tanvir (member). Alex is an admin.
-  const task = run({ type: "task.create", data: { title: "Draft copy", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, as("usr_sara"));
+test("task permissions: project leads and admins manage tasks, the assignee only moves status", () => {
+  // Jajabor: Sara (member) leads it; Tanvir is a member; Alex is an admin; Nadia isn't in the project.
   const forbidden = (e) => assert.equal(e.status, 403);
+  fails({ type: "task.create", data: { title: "Self-assigned", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.create", data: { title: "Elsewhere", projectId: "prj_storefront", assigneeId: "usr_sara" } }, forbidden, as("usr_sara"));
+  const task = run({ type: "task.create", data: { title: "Draft copy", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, as("usr_sara"));
+  fails({ type: "task.update", id: task._id, data: { projectId: "prj_storefront" } }, forbidden, as("usr_sara"));
 
   fails({ type: "task.update", id: task._id, data: { title: "Renamed" } }, forbidden, as("usr_tanvir"));
   fails({ type: "task.update", id: task._id, data: { dueDate: today } }, forbidden, as("usr_tanvir"));
@@ -255,7 +258,7 @@ test("task permissions: creator and admins edit, the assignee only moves status"
   fails({ type: "task.update", id: task._id, data: { title: "Mine now" } }, forbidden, as("usr_nadia"));
   run({ type: "task.comment", id: task._id, data: { body: "Can I help?" } }, as("usr_nadia"));
 
-  assert.equal(run({ type: "task.update", id: task._id, data: { title: "Draft landing copy" } }, as("usr_sara")).title, "Draft landing copy", "the creator edits");
+  assert.equal(run({ type: "task.update", id: task._id, data: { title: "Draft landing copy" } }, as("usr_sara")).title, "Draft landing copy", "the lead edits");
   assert.equal(run({ type: "task.update", id: task._id, data: { dueDate: today } }).dueDate, today, "admins edit");
   assert.equal(run({ type: "task.update", id: task._id, data: { priority: "high" } }, as("usr_sara")).priority, "high");
   assert.equal(run({ type: "task.update", id: task._id, data: { description: "  Hero, pricing and FAQ sections  " } }, as("usr_sara")).description, "Hero, pricing and FAQ sections", "trimmed");
@@ -267,6 +270,75 @@ test("task permissions: creator and admins edit, the assignee only moves status"
   state = { ...state, tasks: state.tasks.map((t) => (t._id === task._id ? { ...t, priority: undefined } : t)) };
   assert.equal(run({ type: "task.update", id: task._id, data: { status: "doing" } }, as("usr_tanvir")).status, "doing");
   run({ type: "task.delete", id: task._id }, as("usr_sara"));
+
+  // Leads: chosen by admins, always project members, and gone when they leave the project.
+  fails({ type: "project.update", id: "prj_jajabor", data: { leadIds: ["usr_sara", "usr_tanvir"] } }, forbidden, as("usr_sara"));
+  run({ type: "project.update", id: "prj_jajabor", data: { name: "Jajabor" } }, as("usr_sara"));
+  assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, ["usr_sara"], "saving without leads keeps them");
+  run({ type: "project.update", id: "prj_jajabor", data: { leadIds: ["usr_tanvir", "usr_nadia"] } });
+  assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, ["usr_tanvir"], "only members can lead");
+  run({ type: "task.create", data: { title: "Now I can", projectId: "prj_jajabor", assigneeId: "usr_sara" } }, as("usr_tanvir"));
+  fails({ type: "task.create", data: { title: "Not any more", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, forbidden, as("usr_sara"));
+  run({ type: "project.update", id: "prj_jajabor", data: { memberIds: ["usr_alex", "usr_sara"] } });
+  assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, [], "leaving the project ends being a lead");
+  run({ type: "project.update", id: "prj_jajabor", data: { memberIds: ["usr_alex", "usr_sara", "usr_tanvir"], leadIds: ["usr_sara"] } });
+
+  // Project details, phase moves, hold and archive: leads and admins. Notes: anyone.
+  fails({ type: "project.update", id: "prj_jajabor", data: { name: "Renamed" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "project.advance", id: "prj_jajabor" }, forbidden, as("usr_tanvir"));
+  fails({ type: "project.hold", id: "prj_jajabor", data: { onHold: true } }, forbidden, as("usr_tanvir"));
+  fails({ type: "project.archive", id: "prj_jajabor", data: { archived: true } }, forbidden, as("usr_tanvir"));
+  assert.equal(run({ type: "project.update", id: "prj_jajabor", data: { notes: "Staging is down until Monday" } }, as("usr_tanvir")).notes, "Staging is down until Monday");
+  run({ type: "project.hold", id: "prj_jajabor", data: { onHold: true } }, as("usr_sara"));
+  run({ type: "project.hold", id: "prj_jajabor", data: { onHold: false } }, as("usr_sara"));
+
+  // Only admins create projects, even leads can't; the admin picks the leads or leads it.
+  fails({ type: "project.create", data: { name: "Side project", memberIds: [] } }, forbidden, as("usr_tanvir"));
+  fails({ type: "project.create", data: { name: "Side project", memberIds: [] } }, forbidden, as("usr_sara"));
+  const own = run({ type: "project.create", data: { name: "Side project", memberIds: [] } });
+  assert.deepEqual(own.leadIds, ["usr_alex"]);
+  const picked = run({ type: "project.create", data: { name: "Client work", memberIds: ["usr_sara"], leadIds: ["usr_sara"] } });
+  assert.deepEqual(picked.leadIds, ["usr_sara"]);
+});
+
+test("custom phases: each project has its own, admins edit them safely", () => {
+  const forbidden = (e) => assert.equal(e.status, 403);
+  // An admin creates a project with four phases; it starts in the first.
+  const site = run({ type: "project.create", data: { name: "Landing page", memberIds: ["usr_sara"], leadIds: ["usr_sara"], phases: [{ name: "Brief" }, { name: "Content" }, { name: "Build" }, { name: "Live" }] } });
+  assert.deepEqual(site.phases.map((p) => p.name), ["Brief", "Content", "Build", "Live"]);
+  assert.equal(site.phase, site.phases[0]._id);
+  assert.ok(site.phases.every((p) => p._id), "new phases get ids");
+  const [brief, content, build, live] = site.phases;
+  fails({ type: "project.create", data: { name: "Dupes", phases: [{ name: "Build" }, { name: " build " }] } }, (e) => assert.ok(e.fieldErrors.phases));
+  fails({ type: "project.create", data: { name: "None", phases: [] } }, (e) => assert.ok(e.fieldErrors.phases));
+  assert.deepEqual(run({ type: "project.create", data: { name: "Standard" } }).phases.map((p) => p._id), ["idea", "planning", "design", "build", "test", "launch", "maintain"], "the standard seven by default");
+
+  // Tasks use the project's phases.
+  const task = run({ type: "task.create", data: { title: "Hero copy", projectId: site._id, assigneeId: "usr_sara" } }, as("usr_sara"));
+  assert.equal(task.phase, brief._id, "defaults to the project's phase");
+  fails({ type: "task.create", data: { title: "Wrong", projectId: site._id, phase: "design" } }, (e) => assert.ok(e.fieldErrors.phase));
+  assert.equal(run({ type: "task.update", id: task._id, data: { phase: content._id } }, as("usr_sara")).phase, content._id);
+
+  // Advancing walks the project's own order and stops at its last phase.
+  run({ type: "project.advance", id: site._id });
+  assert.equal(state.projects.find((p) => p._id === site._id).phase, content._id);
+  run({ type: "project.update", id: site._id, data: { phase: live._id } });
+  fails({ type: "project.advance", id: site._id }, (e) => assert.match(e.message, /Live is the last phase/));
+
+  // Only admins change phases, even a lead can't; renaming, adding and reordering keep the ids.
+  const renamed = [live, { ...content, name: "Copy" }, build, brief, { name: "Retro" }];
+  fails({ type: "project.update", id: site._id, data: { phases: renamed } }, forbidden, as("usr_sara"));
+  const updated = run({ type: "project.update", id: site._id, data: { phases: renamed } });
+  assert.deepEqual(updated.phases.map((p) => p.name), ["Live", "Copy", "Build", "Brief", "Retro"]);
+  assert.equal(updated.phases[1]._id, content._id, "renaming keeps the id, so tasks stay put");
+  run({ type: "project.update", id: site._id, data: { name: "Landing page v2" } }, as("usr_sara"));
+  assert.equal(state.projects.find((p) => p._id === site._id).phases.length, 5, "saving without phases keeps them");
+
+  // A phase can't be removed while it's current or still has tasks.
+  fails({ type: "project.update", id: site._id, data: { phases: [content, build, brief] } }, (e) => assert.match(e.message, /current phase/));
+  fails({ type: "project.update", id: site._id, data: { phases: [live, build, brief] } }, (e) => assert.match(e.message, /still has 1 task/));
+  run({ type: "project.update", id: site._id, data: { phases: [live, { ...content, name: "Copy" }, build] } });
+  assert.deepEqual(state.projects.find((p) => p._id === site._id).phases.map((p) => p.name), ["Live", "Copy", "Build"], "empty phases can go");
 });
 
 test("task discussions: comments notify followers and are removed with the task", () => {

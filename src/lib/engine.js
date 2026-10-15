@@ -10,11 +10,12 @@ import {
   taskInput,
   workspaceInput,
 } from "./schemas";
-import { FORMER_MEMBER, nextPhase, phaseLabel, taskPriority } from "./constants";
+import { FORMER_MEMBER, taskPriority } from "./constants";
+import { DEFAULT_PHASES, nextPhaseIn, phaseName, projectPhases } from "./phases";
 import { parseMentions } from "./text";
 import { conversationMemberIds, readStateId } from "./selectors";
 import { pluralize } from "./format";
-import { canEditTask, canSetTaskStatus, TASK_DETAIL_FIELDS } from "./permissions";
+import { canChooseLeads, canCreateProject, canEditPhases, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
 
 /**
  * The domain engine applies one action to an organization snapshot.
@@ -96,15 +97,48 @@ function createTx(snapshot, ctx) {
   return tx;
 }
 
-const FORBIDDEN_TASK = "Only the person who created this task or an admin can change it.";
+const projectOf = (tx, task) => tx.state.projects.find((p) => p._id === task.projectId);
+
+function requireTaskManager(tx, project) {
+  if (!canManageTasks(project, tx.me())) throw new DomainError("Only this project’s leads or an admin can create and assign its tasks.", { status: 403 });
+}
 
 function requireTaskEdit(tx, task) {
-  if (!canEditTask(task, tx.me())) throw new DomainError(FORBIDDEN_TASK, { status: 403 });
+  if (!canEditTask(task, tx.me(), projectOf(tx, task))) throw new DomainError("Only this project’s leads or an admin can change this task.", { status: 403 });
 }
 
 function requireTaskStatus(tx, task) {
-  if (!canSetTaskStatus(task, tx.me())) throw new DomainError("Only the assignee, the person who created this task or an admin can change its status.", { status: 403 });
+  if (!canSetTaskStatus(task, tx.me(), projectOf(tx, task))) {
+    throw new DomainError("Only the assignee, this project’s leads or an admin can change this task’s status.", { status: 403 });
+  }
 }
+
+/** A project's phases from form input: names trimmed and unique, new phases given ids. */
+function buildPhases(ctx, list) {
+  const seenNames = new Set();
+  const seenIds = new Set();
+  return list.map((phase, i) => {
+    const key = phase.name.toLowerCase();
+    if (seenNames.has(key)) throw new DomainError("Each phase needs a different name.", { fieldErrors: { phases: `“${phase.name}” is used twice`, [`phases.${i}.name`]: "Already used" } });
+    seenNames.add(key);
+    const _id = phase._id && !seenIds.has(phase._id) ? phase._id : ctx.newId("phs");
+    seenIds.add(_id);
+    return { _id, name: phase.name };
+  });
+}
+
+function requirePhaseOf(project, phase, field = "phase") {
+  if (!projectPhases(project).some((p) => p._id === phase)) {
+    throw new DomainError("Choose one of the project’s phases.", { fieldErrors: { [field]: "Choose one of this project’s phases" } });
+  }
+}
+
+function requireProjectManager(tx, project) {
+  if (!canManageProject(project, tx.me())) throw new DomainError("Only this project’s leads or an admin can change it.", { status: 403 });
+}
+
+/** Leads must be project members; anyone who leaves the project stops being a lead. */
+const leadsAmong = (leadIds, memberIds) => leadIds.filter((id) => memberIds.includes(id));
 
 function requireAdmin(tx) {
   if (tx.me()?.role !== "admin") throw new DomainError("Only admins can do that.", { status: 403 });
@@ -165,14 +199,46 @@ function postMessage(tx, ctx, conversation, body) {
   return message;
 }
 
+/**
+ * New phases for a project edit. Only admins may change them, and a phase can't be removed while
+ * it's the current phase or still has tasks.
+ */
+function updatedPhases(tx, ctx, current, input) {
+  const phases = buildPhases(ctx, input.phases);
+  const before = projectPhases(current);
+  const changed = phases.length !== before.length || phases.some((p, i) => p._id !== before[i]._id || p.name !== before[i].name);
+  if (!changed) return current.phases ?? phases;
+  if (!canEditPhases(tx.me())) throw new DomainError("Only admins can change a project’s phases.", { status: 403, fieldErrors: { phases: "Only admins can change this" } });
+  const kept = new Set(phases.map((p) => p._id));
+  for (const removed of before.filter((p) => !kept.has(p._id))) {
+    if ((input.phase ?? current.phase) === removed._id) {
+      throw new DomainError(`“${removed.name}” is the current phase, so it can’t be removed.`, { fieldErrors: { phases: `Move the project out of “${removed.name}” first` } });
+    }
+    const left = tx.state.tasks.filter((t) => t.projectId === current._id && t.phase === removed._id).length;
+    if (left) {
+      throw new DomainError(`“${removed.name}” still has ${pluralize(left, "task")}, so it can’t be removed.`, { fieldErrors: { phases: `Move the ${pluralize(left, "task")} in “${removed.name}” to another phase first` } });
+    }
+  }
+  return phases;
+}
+
 const handlers = {
   // --------------------------------------------------------------- projects
   "project.create"(tx, ctx, { data }) {
-    const input = parse(projectInput, { phase: "idea", ...data });
+    if (!canCreateProject(tx.me())) throw new DomainError("Only admins can create projects.", { status: 403 });
+    const input = parse(projectInput, data);
+    const phases = input.phases ? buildPhases(ctx, input.phases) : DEFAULT_PHASES.map((p) => ({ ...p }));
+    const phase = input.phase ?? phases[0]._id;
+    requirePhaseOf({ phases }, phase);
     const memberIds = activeUserIds(tx, [...new Set([ctx.userId, ...input.memberIds])], "memberIds");
+    // The admin creating it chooses the leads; without a choice, they lead it themselves.
+    const leadIds = data?.leadIds ? leadsAmong(input.leadIds, memberIds) : [ctx.userId];
     const project = tx.create("projects", "prj", {
       ...input,
+      phases,
+      phase,
       memberIds,
+      leadIds,
       onHold: false,
       archived: false,
       isInternal: false,
@@ -186,25 +252,39 @@ const handlers = {
   "project.update"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
     const input = parse(projectInput, { ...current, ...data });
+    // Anyone may edit the notes; every other change needs a lead or an admin.
+    const same = (key) => JSON.stringify(input[key] ?? null) === JSON.stringify(current[key] ?? null);
+    if (Object.keys(data ?? {}).some((key) => key !== "notes" && key in input && !same(key))) requireProjectManager(tx, current);
     const memberIds = activeUserIds(tx, input.memberIds, "memberIds", current.memberIds);
     if (!memberIds.length) throw new DomainError("A project needs at least one member.", { fieldErrors: { memberIds: "Add at least one member" } });
-    const project = tx.put("projects", { ...current, ...input, memberIds, updatedAt: tx.now });
+    const before = projectLeadIds(current);
+    if (data?.leadIds && (input.leadIds.length !== before.length || input.leadIds.some((id) => !before.includes(id))) && !canChooseLeads(tx.me())) {
+      throw new DomainError("Only admins can choose a project’s leads.", { status: 403, fieldErrors: { leadIds: "Only admins can change this" } });
+    }
+    const leadIds = leadsAmong(data?.leadIds ? input.leadIds : before, memberIds);
+    const phases = data?.phases ? updatedPhases(tx, ctx, current, input) : current.phases;
+    const phase = input.phase ?? current.phase;
+    requirePhaseOf({ phases }, phase);
+    const project = tx.put("projects", { ...current, ...input, phases, phase, memberIds, leadIds, updatedAt: tx.now });
     const conversation = conversationFor(tx, id);
     if (conversation) tx.put("conversations", { ...conversation, memberIds });
     return project;
   },
   "project.advance"(tx, ctx, { id }) {
     const current = tx.find("projects", id, "Project");
-    const phase = nextPhase(current.phase);
-    if (!phase) throw new DomainError(`${phaseLabel(current.phase)} is the last phase.`);
-    return tx.put("projects", { ...current, phase, updatedAt: tx.now });
+    requireProjectManager(tx, current);
+    const next = nextPhaseIn(current, current.phase);
+    if (!next) throw new DomainError(`${phaseName(current, current.phase)} is the last phase.`);
+    return tx.put("projects", { ...current, phase: next._id, updatedAt: tx.now });
   },
   "project.hold"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
+    requireProjectManager(tx, current);
     return tx.put("projects", { ...current, onHold: Boolean(data?.onHold), updatedAt: tx.now });
   },
   "project.archive"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
+    requireProjectManager(tx, current);
     if (current.isInternal) throw new DomainError("The company-wide project can’t be archived.");
     return tx.put("projects", { ...current, archived: Boolean(data?.archived), updatedAt: tx.now });
   },
@@ -213,7 +293,9 @@ const handlers = {
   "task.create"(tx, ctx, { data }) {
     const project = data?.projectId ? tx.state.projects.find((p) => p._id === data.projectId) : null;
     const input = parse(taskInput, { phase: project?.phase, assigneeId: ctx.userId, status: "todo", ...data });
-    findProject(tx, input.projectId);
+    const target = findProject(tx, input.projectId);
+    requireTaskManager(tx, target);
+    requirePhaseOf(target, input.phase);
     activeUserIds(tx, [input.assigneeId], "assigneeId");
     let meeting = null;
     if (input.meetingId) {
@@ -238,6 +320,8 @@ const handlers = {
     const input = parse(taskInput, { ...current, ...data });
     const before = { ...current, priority: taskPriority(current) };
     if (TASK_DETAIL_FIELDS.some((field) => (input[field] ?? "") !== (before[field] ?? ""))) requireTaskEdit(tx, current);
+    if (input.projectId !== current.projectId) requireTaskManager(tx, findProject(tx, input.projectId));
+    if (input.phase !== current.phase || input.projectId !== current.projectId) requirePhaseOf(findProject(tx, input.projectId), input.phase);
     if (input.status !== current.status) requireTaskStatus(tx, current);
     findProject(tx, input.projectId);
     activeUserIds(tx, [input.assigneeId], "assigneeId", [current.assigneeId]);
@@ -462,7 +546,7 @@ const handlers = {
     if (user.deletedAt) throw new DomainError("This member was already deleted.");
     for (const project of tx.state.projects.filter((p) => p.memberIds.includes(id))) {
       const memberIds = project.memberIds.filter((uid) => uid !== id);
-      tx.put("projects", { ...project, memberIds, updatedAt: tx.now });
+      tx.put("projects", { ...project, memberIds, leadIds: leadsAmong(projectLeadIds(project), memberIds), updatedAt: tx.now });
       const conversation = conversationFor(tx, project._id);
       if (conversation) tx.put("conversations", { ...conversation, memberIds });
     }

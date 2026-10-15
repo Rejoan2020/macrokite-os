@@ -1,6 +1,6 @@
 import "server-only";
 import mongoose, { Schema } from "mongoose";
-import { CONVERSATION_TYPES, NOTIFICATION_TYPES, PHASES, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "../constants";
+import { CONVERSATION_TYPES, NOTIFICATION_TYPES, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "../constants";
 
 // String ids keep identifiers identical across demo mode and database mode.
 // Every business collection carries an indexed orgId; all queries filter on it.
@@ -50,15 +50,20 @@ export const Invite = model("Invite", { orgId, email: String, invitedBy: String,
   { email: 1, acceptedAt: 1 },
 ]);
 
+// A project's own phases, in order. Missing on older projects, which use the standard seven.
+const Phase = new Schema({ _id: String, name: String }, { _id: false });
+
 export const Project = model("Project", {
   orgId,
   name: String,
   description: String,
-  phase: { type: String, enum: PHASES },
+  phase: String, // one of the project's phase ids
+  phases: { type: [Phase], default: undefined },
   onHold: Boolean,
   archived: Boolean,
   deadline: String,
   memberIds: [String],
+  leadIds: [String], // create and assign this project's tasks; chosen by admins
   notes: String,
   isInternal: Boolean,
   createdBy: String,
@@ -70,7 +75,7 @@ export const Task = model(
   {
     orgId,
     projectId: { type: String, required: true },
-    phase: { type: String, enum: PHASES },
+    phase: String, // one of its project's phase ids
     title: String,
     description: String, // optional; missing on older tasks
     assigneeId: String,

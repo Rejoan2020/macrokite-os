@@ -7,18 +7,21 @@ import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/primitives";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { Field, Input, PeoplePicker, Select, Textarea } from "@/components/ui/form";
-import { DEFAULT_TASK_PRIORITY, PHASES, phaseLabel, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskPriority } from "@/lib/constants";
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskPriority } from "@/lib/constants";
+import { DEFAULT_PHASES, projectPhases } from "@/lib/phases";
+import { newPhaseRow, PhaseEditor } from "./PhaseEditor";
 import { pluralize, toLocalInput } from "@/lib/format";
+import { canChooseLeads, canEditPhases, projectLeadIds } from "@/lib/permissions";
 import { MessageSquare } from "lucide-react";
-import { useTaskThreadSummary } from "@/components/tasks/taskHooks";
+import { useTaskManagement, useTaskThreadSummary } from "@/components/tasks/taskHooks";
 import Link from "next/link";
 
-const phaseOptions = PHASES.map((p) => ({ value: p, label: phaseLabel(p) }));
+const phaseOptionsFor = (project) => projectPhases(project).map((p) => ({ value: p._id, label: p.name }));
 
-function useProjectOptions(includeId) {
+function useProjectOptions(includeId, allowed = () => true) {
   const { data } = useWorkspace();
   return data.projects
-    .filter((p) => !p.archived || p._id === includeId)
+    .filter((p) => (!p.archived && allowed(p)) || p._id === includeId)
     .sort((a, b) => Number(a.isInternal) - Number(b.isInternal) || a.name.localeCompare(b.name))
     .map((p) => ({ value: p._id, label: p.name }));
 }
@@ -48,22 +51,43 @@ export function ProjectDialog({ open, project, onClose, onSaved }) {
 }
 
 function ProjectForm({ project, onClose, onSaved }) {
-  const { activeUsers, currentUserId } = useWorkspace();
+  const { data, activeUsers, currentUserId, currentUser } = useWorkspace();
+  const chooseLeads = canChooseLeads(currentUser);
+  const editPhases = canEditPhases(currentUser);
   const { run, busy, fieldErrors } = useAction();
   const [values, setValues] = useState({
     name: project?.name ?? "",
     description: project?.description ?? "",
-    phase: project?.phase ?? "idea",
+    phase: project?.phase ?? "",
+    phases: (project ? projectPhases(project) : DEFAULT_PHASES).map(newPhaseRow),
     deadline: project?.deadline ?? "",
     memberIds: project?.memberIds ?? [currentUserId],
+    leadIds: project ? projectLeadIds(project) : [currentUserId],
   });
+  const memberUsers = activeUsers.filter((u) => values.memberIds.includes(u._id));
+  // The current phase can be any saved phase that is still in the list (new ones exist once saved).
+  const currentOptions = values.phases.filter((p) => p._id && projectPhases(project).some((saved) => saved._id === p._id)).map((p) => ({ value: p._id, label: p.name || "Untitled" }));
+  const lockedReason = (row) => {
+    if (!project || !row._id) return null;
+    if (row._id === values.phase) return "it’s the current phase";
+    const left = data.tasks.filter((t) => t.projectId === project._id && t.phase === row._id).length;
+    return left ? `it still has ${pluralize(left, "task")}` : null;
+  };
+  const phaseRowErrors = Object.fromEntries(values.phases.map((_, i) => [i, fieldErrors[`phases.${i}.name`]]).filter(([, e]) => e));
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
+    // Only admins send leads and phases; for everyone else the server keeps them.
+    const { leadIds, phases, phase, ...rest } = values;
+    const payload = { ...rest };
+    if (chooseLeads) payload.leadIds = leadIds.filter((id) => values.memberIds.includes(id));
+    if (editPhases) payload.phases = phases.map(({ _id, name }) => (_id ? { _id, name } : { name }));
+    // A new project starts in its first phase.
+    if (project) payload.phase = phase;
     const result = project
-      ? await run({ type: "project.update", id: project._id, data: values }, { success: "Project updated" })
-      : await run({ type: "project.create", data: values }, { success: "Project created" });
+      ? await run({ type: "project.update", id: project._id, data: payload }, { success: "Project updated" })
+      : await run({ type: "project.create", data: payload }, { success: "Project created" });
     if (result) {
       onClose();
       onSaved?.(result);
@@ -85,16 +109,45 @@ function ProjectForm({ project, onClose, onSaved }) {
           {(p) => <Input {...p} value={values.description} onChange={set("description")} />}
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Phase" error={fieldErrors.phase}>
-            {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={phaseOptions} />}
-          </Field>
+          {project && (
+            <Field label="Current phase" error={fieldErrors.phase}>
+              {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={currentOptions} />}
+            </Field>
+          )}
           <Field label="Deadline" error={fieldErrors.deadline}>
             {(p) => <Input {...p} type="date" value={values.deadline} onChange={set("deadline")} />}
           </Field>
         </div>
+        {editPhases && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-[13px] font-medium text-secondary">Phases</legend>
+            <p className="-mt-1 mb-1 text-xs text-faint">
+              {project ? "Rename, add, remove or reorder this project’s phases." : "The project starts in the first phase. Rename, add, remove or reorder them to fit this project."}
+            </p>
+            <PhaseEditor
+              rows={values.phases}
+              onChange={(phases) => setValues((v) => ({ ...v, phases }))}
+              lockedReason={lockedReason}
+              error={fieldErrors.phases}
+              rowErrors={phaseRowErrors}
+            />
+          </fieldset>
+        )}
         <Field label="Members" error={fieldErrors.memberIds}>
           {(p) => <PeoplePicker {...p} users={activeUsers} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
         </Field>
+        {chooseLeads && (
+          <Field label="Leads" hint="Leads create and assign this project’s tasks. Admins can always do this too." error={fieldErrors.leadIds}>
+            {(p) => (
+              <PeoplePicker
+                {...p}
+                users={memberUsers}
+                value={values.leadIds.filter((id) => values.memberIds.includes(id))}
+                onChange={(leadIds) => setValues((v) => ({ ...v, leadIds }))}
+              />
+            )}
+          </Field>
+        )}
       </form>
     </Dialog>
   );
@@ -110,14 +163,17 @@ function TaskForm({ task, defaults = {}, onClose }) {
   const { data, lookup, activeUsers, currentUserId } = useWorkspace();
   const { run, busy, fieldErrors } = useAction();
   const [confirming, setConfirming] = useState(false);
-  const projectOptions = useProjectOptions(task?.projectId);
-  const internal = data.projects.find((p) => p.isInternal);
-  const initialProject = task?.projectId ?? defaults.projectId ?? internal?._id ?? "";
+  // Tasks can only be created in, or moved to, projects you lead (any project for admins).
+  const { canManage, projects: manageable } = useTaskManagement();
+  const projectOptions = useProjectOptions(task?.projectId, canManage);
+  const internal = manageable.find((p) => p.isInternal);
+  const preferred = manageable.find((p) => p._id === defaults.projectId);
+  const initialProject = task?.projectId ?? preferred?._id ?? internal?._id ?? manageable[0]?._id ?? "";
   const [values, setValues] = useState({
     title: task?.title ?? defaults.title ?? "",
     description: task?.description ?? defaults.description ?? "",
     projectId: initialProject,
-    phase: task?.phase ?? defaults.phase ?? lookup.projects[initialProject]?.phase ?? "idea",
+    phase: task?.phase ?? defaults.phase ?? lookup.projects[initialProject]?.phase ?? projectPhases(lookup.projects[initialProject])[0]._id,
     assigneeId: task?.assigneeId ?? defaults.assigneeId ?? currentUserId,
     dueDate: task?.dueDate ?? defaults.dueDate ?? "",
     priority: task ? taskPriority(task) : defaults.priority ?? DEFAULT_TASK_PRIORITY,
@@ -170,7 +226,7 @@ function TaskForm({ task, defaults = {}, onClose }) {
               {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
             </Field>
             <Field label="Phase" error={fieldErrors.phase}>
-              {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={phaseOptions} />}
+              {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={phaseOptionsFor(lookup.projects[values.projectId])} />}
             </Field>
             <Field label="Assignee" error={fieldErrors.assigneeId}>
               {(p) => <Select {...p} value={values.assigneeId} onChange={set("assigneeId")} options={people.map((u) => ({ value: u._id, label: u._id === currentUserId ? `${u.name} (me)` : u.name }))} />}

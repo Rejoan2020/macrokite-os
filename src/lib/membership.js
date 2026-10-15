@@ -1,4 +1,5 @@
 import { COMPANY_PROJECT, DEFAULT_NOTIFICATION_PREFS } from "./constants";
+import { DEFAULT_PHASES } from "./phases";
 import { workspaceInput } from "./schemas";
 import { SCHEMA_VERSION } from "./seed";
 
@@ -117,10 +118,12 @@ export function newWorkspace({ name: rawName, identity, now, newId, slugSuffix }
     _id: newId("prj"),
     orgId,
     name: COMPANY_PROJECT,
+    phases: DEFAULT_PHASES.map((p) => ({ ...p })),
     description: "Company-wide work: hiring, operations, tooling and team rituals.",
     phase: "maintain",
     deadline: "",
     memberIds: [owner._id],
+    leadIds: [],
     notes: "",
     onHold: false,
     archived: false,

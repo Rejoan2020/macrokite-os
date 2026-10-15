@@ -5,19 +5,14 @@ import { Plus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { PRIORITY_DOT, TaskListHead, TaskRow } from "@/components/tasks/TaskRow";
+import { useTaskManagement } from "@/components/tasks/taskHooks";
 import { FilterMenu } from "@/components/ui/FilterMenu";
+import { StatTile } from "@/components/ui/StatTile";
 import { Button, cx, EmptyNote, Page, PageHeader, SearchField, Summary } from "@/components/ui/primitives";
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, taskPriority } from "@/lib/constants";
 import { pluralize, todayISO } from "@/lib/format";
-import { completedThisWeek, groupMyTasks, isOpenTask, isOverdue, matches } from "@/lib/selectors";
+import { completedThisWeek, isOpenTask, isOverdue, matches, sortByDue } from "@/lib/selectors";
 
-const GROUPS = [
-  { key: "overdue", label: "Overdue" },
-  { key: "today", label: "Today" },
-  { key: "week", label: "This week" },
-  { key: "later", label: "Later" },
-  { key: "none", label: "No due date" },
-];
 
 /** Summary tiles. Each counts your open tasks and, clicked, narrows the list to them. */
 const TILES = [
@@ -26,28 +21,11 @@ const TILES = [
   { key: "doing", label: "In progress", test: (t) => t.status === "doing" },
 ];
 
-function Tile({ label, count, active, tone, onClick }) {
-  const alert = tone === "danger" && count > 0;
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cx(
-        "flex min-w-0 flex-col items-start gap-1 rounded-xl border px-4 py-3 text-left transition-colors",
-        active ? "border-accent bg-accent-tint" : alert ? "border-danger-outline bg-card hover:border-danger-line" : "border-line bg-card hover:border-dash hover:bg-hover/40"
-      )}
-    >
-      <span className={cx("text-2xl leading-none font-semibold tabular-nums", alert ? "text-danger" : active ? "text-accent-light" : "text-strong")}>{count}</span>
-      <span className={cx("text-[12px]", active ? "text-accent-light" : "text-muted")}>{label}</span>
-    </button>
-  );
-}
-
-/** Tasks assigned to you. The Who column shows who assigned each one. */
+/** Tasks assigned to you, in High, Medium and Low sections (earliest due first). The Who column shows who assigned each one. */
 export function MyTasksView() {
   const { data, lookup, currentUserId } = useWorkspace();
   const overlays = useOverlays();
+  const { canCreate } = useTaskManagement();
   const [focus, setFocus] = useState(null); // a TILES key, or null for everything open
   const [query, setQuery] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -68,7 +46,7 @@ export function MyTasksView() {
     );
   const tile = TILES.find((x) => x.key === focus);
   const visibleOpen = filtered(tile ? open.filter((t) => tile.test(t, today)) : open);
-  const groups = groupMyTasks(visibleOpen, today);
+  const sections = TASK_PRIORITIES.map((p) => ({ priority: p, tasks: sortByDue(visibleOpen.filter((t) => taskPriority(t) === p)) })).filter((x) => x.tasks.length);
   const completed = filtered(completedThisWeek(mine, today));
   const filtersOn = Boolean(focus || query || projectId || priority);
 
@@ -102,15 +80,17 @@ export function MyTasksView() {
           />
         }
         actions={
-          <Button variant="primary" icon={Plus} onClick={() => overlays.newTask()}>
-            Add task
-          </Button>
+          canCreate && (
+            <Button variant="primary" icon={Plus} onClick={() => overlays.newTask()}>
+              Add task
+            </Button>
+          )
         }
       />
 
       <div className="grid grid-cols-3 gap-2.5" aria-label="Filter by">
         {TILES.map((t) => (
-          <Tile key={t.key} label={t.label} count={counts[t.key]} tone={t.tone} active={focus === t.key} onClick={() => setFocus(focus === t.key ? null : t.key)} />
+          <StatTile key={t.key} label={t.label} count={counts[t.key]} tone={t.tone} active={focus === t.key} onClick={() => setFocus(focus === t.key ? null : t.key)} />
         ))}
       </div>
 
@@ -132,16 +112,13 @@ export function MyTasksView() {
         emptyText && <EmptyNote>{emptyText}</EmptyNote>
       )}
 
-      {GROUPS.filter((g) => groups[g.key].length).map((g) => (
-        <section
-          key={g.key}
-          aria-labelledby={`g-${g.key}`}
-          className={cx("flex flex-col overflow-hidden rounded-xl border bg-card", g.key === "overdue" ? "border-danger-outline" : "border-line")}
-        >
-          <h2 id={`g-${g.key}`} className={cx("label-caps border-b border-line px-[18px] py-3", g.key === "overdue" ? "text-danger" : "text-secondary")}>
-            {g.label} · {groups[g.key].length}
+      {sections.map(({ priority: p, tasks }) => (
+        <section key={p} aria-labelledby={`g-${p}`} className="flex flex-col overflow-hidden rounded-xl border border-line bg-card">
+          <h2 id={`g-${p}`} className="label-caps flex items-center gap-2 border-b border-line px-[18px] py-3 text-secondary">
+            <span aria-hidden className={cx("size-2 rounded-full", PRIORITY_DOT[p])} />
+            {TASK_PRIORITY_LABELS[p]} priority · {tasks.length}
           </h2>
-          {groups[g.key].map((t) => (
+          {tasks.map((t) => (
             <TaskRow key={t._id} task={t} who="assigner" />
           ))}
         </section>

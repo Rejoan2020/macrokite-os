@@ -40,12 +40,13 @@ export function buildSeed(now = new Date()) {
   const invites = [{ _id: "inv_rafi", orgId, email: "rafi@macrokite.dev", invitedBy: A, createdAt: on(-2, 10), sentAt: on(-2, 10), acceptedAt: null }];
 
   const project = (_id, name, description, phase, deadline, memberIds, extra = {}) => ({
-    _id, orgId, name, description, phase, deadline: deadline === null ? "" : day(deadline), memberIds, notes: "",
+    _id, orgId, name, description, phase, deadline: deadline === null ? "" : day(deadline), memberIds, leadIds: [A].filter((id) => memberIds.includes(id)), notes: "",
     onHold: false, archived: false, isInternal: false, createdBy: A, createdAt: created, updatedAt: created, ...extra,
   });
   const projects = [
     project("prj_fleet", "Fleet Tracker MVP", "Dispatcher dashboard with live vehicle positions and delivery exceptions.", "build", -6, [A], { onHold: true }),
     project("prj_jajabor", "Jajabor", "Travel planning app for domestic trips in Bangladesh.", "build", 47, [A, S, T], {
+      leadIds: [S],
       notes:
         "Repo: https://github.com/macrokite/jajabor\nStaging: https://staging.jajabor.app\nDesign: https://www.figma.com/file/jajabor\n\nDatabase on MongoDB Atlas (one cluster, dev and prod databases). Credentials live in the team password manager, not here.",
     }),
