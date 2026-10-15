@@ -39,6 +39,7 @@ export function useAction() {
 /** Toast for an invite that was added or resent: whether the email went out (demo mode sends none). */
 export function announceInvite(toast, invite, title) {
   if (invite.emailSent) toast.success(title, `Email sent to ${invite.email}`);
+  else if (invite.hasAccount) toast.info("Invite saved", `${invite.email} already has an account, so no email was sent. Share the app link; they join when they sign in.`);
   else if (invite.emailError) toast.error("Invite saved, but the email didn’t send", `${invite.emailError} Share the app link with ${invite.email} yourself.`);
   else toast.success(title, `${invite.email} joins when they sign in. Demo mode sends no email.`);
 }
