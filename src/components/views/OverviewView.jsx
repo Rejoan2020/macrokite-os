@@ -63,7 +63,7 @@ export function OverviewView() {
         {myOpen.length > 0 && (
           <Panel id="o-tasks" title="My tasks" action={<TextLink href="/tasks">All {myOpen.length}</TextLink>}>
             {myOpen.slice(0, 3).map((task) => (
-              <TaskRow key={task._id} task={task} overdueLabel className="py-3" />
+              <TaskRow key={task._id} task={task} who="assigner" />
             ))}
           </Panel>
         )}

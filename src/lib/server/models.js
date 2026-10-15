@@ -1,6 +1,6 @@
 import "server-only";
 import mongoose, { Schema } from "mongoose";
-import { CONVERSATION_TYPES, NOTIFICATION_TYPES, PHASES, ROLES, TASK_SOURCES, TASK_STATUSES } from "../constants";
+import { CONVERSATION_TYPES, NOTIFICATION_TYPES, PHASES, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "../constants";
 
 // String ids keep identifiers identical across demo mode and database mode.
 // Every business collection carries an indexed orgId; all queries filter on it.
@@ -12,7 +12,9 @@ const ref = { type: String, default: null };
 const timestamps = { createdAt: String, updatedAt: String };
 
 function model(name, definition, indexes = []) {
-  if (mongoose.models[name]) return mongoose.models[name];
+  // `next dev` re-runs this module when code changes. Rebuild the model instead of reusing the cached
+  // one, or schema changes (new enum values, new fields) are rejected or dropped until a restart.
+  if (mongoose.models[name]) mongoose.deleteModel(name);
   const schema = new Schema({ _id: id, ...definition }, options);
   indexes.forEach((index) => (Array.isArray(index) ? schema.index(...index) : schema.index(index)));
   return mongoose.model(name, schema);
@@ -70,8 +72,10 @@ export const Task = model(
     projectId: { type: String, required: true },
     phase: { type: String, enum: PHASES },
     title: String,
+    description: String, // optional; missing on older tasks
     assigneeId: String,
     status: { type: String, enum: TASK_STATUSES },
+    priority: { type: String, enum: TASK_PRIORITIES }, // missing on older tasks: treated as medium
     dueDate: String,
     source: { type: String, enum: TASK_SOURCES },
     meetingId: ref,
@@ -109,6 +113,7 @@ export const Conversation = model("Conversation", {
   orgId,
   type: { type: String, enum: CONVERSATION_TYPES },
   projectId: ref,
+  taskId: ref, // for a task's discussion
   memberIds: [String],
   createdAt: String,
 });

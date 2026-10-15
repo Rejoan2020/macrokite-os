@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useToast } from "@/components/providers/ToastProvider";
+import { useOpenTask } from "@/components/tasks/taskHooks";
 import { Button, Checkbox, cx, EmptyNote, IconButton, Page, Pill, SectionLabel } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
 import { firstName, formatDue, formatShortDate, formatWhen, joinNames, pluralize, todayISO } from "@/lib/format";
@@ -113,7 +114,7 @@ function LastMeetingLink({ meeting }) {
 
 function OpenItem({ task, prefix }) {
   const { lookup } = useWorkspace();
-  const overlays = useOverlays();
+  const openTask = useOpenTask();
   const due = isOverdue(task) ? "overdue" : task.dueDate ? `due ${formatDue(task.dueDate).replace(/^(Today|Tomorrow)$/, (d) => d.toLowerCase())}` : null;
   return (
     <div className={cx("flex flex-wrap items-center justify-between gap-2.5", !prefix && "pl-3")}>
@@ -122,7 +123,7 @@ function OpenItem({ task, prefix }) {
         <span className="text-strong">{task.title}</span> · {firstName(lookup.users[task.assigneeId]?.name)}
         {due && ` · ${due}`}
       </span>
-      <button type="button" onClick={() => overlays.editTask(task._id)} className="text-[13px] text-warning-strong hover:text-warning">
+      <button type="button" onClick={() => openTask(task)} className="text-[13px] text-warning-strong hover:text-warning">
         Review
       </button>
     </div>
@@ -248,7 +249,7 @@ function Decisions({ meeting }) {
 
 function ActionItems({ meeting, project }) {
   const { data, lookup, activeUsers } = useWorkspace();
-  const overlays = useOverlays();
+  const openTask = useOpenTask();
   const { run } = useAction();
   const [draft, setDraft] = useState(null); // { raw, title, assigneeId, dueDate, problems }
   const items = actionItems(meeting, data.tasks);
@@ -292,7 +293,7 @@ function ActionItems({ meeting, project }) {
       <div className="rounded-xl border border-line bg-card px-4 py-1.5">
         {items.map((t) => (
           <div key={t._id} className="flex min-h-11 flex-wrap items-center gap-3 border-b border-row py-1.5">
-            <button type="button" onClick={() => overlays.editTask(t._id)} className={cx("flex-[1_1_220px] text-left hover:text-strong", t.status === "done" && "text-muted line-through")}>
+            <button type="button" onClick={() => openTask(t)} className={cx("flex-[1_1_220px] text-left hover:text-strong", t.status === "done" && "text-muted line-through")}>
               {t.title}
             </button>
             <span className={cx("text-[13px]", isOverdue(t, today) ? "text-danger" : "text-secondary")}>

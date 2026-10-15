@@ -1,3 +1,4 @@
+import { TASK_PRIORITIES, taskPriority } from "./constants";
 import { todayISO, weekBounds } from "./format";
 
 // Derived data. Every count shown in the UI is computed here from the current snapshot.
@@ -10,10 +11,19 @@ export const indexById = (list) => Object.fromEntries(list.map((item) => [item._
 
 export const readStateId = (conversationId, userId) => `${conversationId}:${userId}`;
 
-/** Users who belong to a conversation: General is everyone active, project chats follow the project. */
+/**
+ * Users who belong to a conversation: General is everyone active, project chats follow the project,
+ * and a task's discussion is its project's members plus the task's assignee and creator.
+ */
 export function conversationMemberIds(conversation, data) {
   if (conversation.type === "general") return data.users.filter((u) => u.active).map((u) => u._id);
   if (conversation.type === "project") return data.projects.find((p) => p._id === conversation.projectId)?.memberIds ?? [];
+  if (conversation.type === "task") {
+    const task = data.tasks.find((t) => t._id === conversation.taskId);
+    if (!task) return [];
+    const project = data.projects.find((p) => p._id === task.projectId);
+    return [...new Set([...(project?.memberIds ?? []), task.assigneeId, task.createdBy])];
+  }
   return conversation.memberIds;
 }
 
@@ -36,8 +46,16 @@ export function unreadByConversation(data, userId) {
   return result;
 }
 
+const priorityRank = (task) => TASK_PRIORITIES.indexOf(taskPriority(task));
+
+/** By due date (none last), then priority, then doing before to do. */
 export const sortByDue = (tasks) =>
-  [...tasks].sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999") || (a.status === "doing" ? -1 : 0) - (b.status === "doing" ? -1 : 0));
+  [...tasks].sort(
+    (a, b) =>
+      (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
+      priorityRank(a) - priorityRank(b) ||
+      (a.status === "doing" ? -1 : 0) - (b.status === "doing" ? -1 : 0)
+  );
 
 /** Groups for My tasks: overdue, today, rest of this week, later, no due date. */
 export function groupMyTasks(tasks, today = todayISO()) {

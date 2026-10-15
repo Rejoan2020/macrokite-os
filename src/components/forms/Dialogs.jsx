@@ -6,9 +6,12 @@ import { announceInvite, useAction } from "@/lib/client/useAction";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/primitives";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
-import { Field, Input, PeoplePicker, Select } from "@/components/ui/form";
-import { PHASES, phaseLabel, TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/constants";
-import { toLocalInput } from "@/lib/format";
+import { Field, Input, PeoplePicker, Select, Textarea } from "@/components/ui/form";
+import { DEFAULT_TASK_PRIORITY, PHASES, phaseLabel, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskPriority } from "@/lib/constants";
+import { pluralize, toLocalInput } from "@/lib/format";
+import { MessageSquare } from "lucide-react";
+import { useTaskThreadSummary } from "@/components/tasks/taskHooks";
+import Link from "next/link";
 
 const phaseOptions = PHASES.map((p) => ({ value: p, label: phaseLabel(p) }));
 
@@ -112,10 +115,12 @@ function TaskForm({ task, defaults = {}, onClose }) {
   const initialProject = task?.projectId ?? defaults.projectId ?? internal?._id ?? "";
   const [values, setValues] = useState({
     title: task?.title ?? defaults.title ?? "",
+    description: task?.description ?? defaults.description ?? "",
     projectId: initialProject,
     phase: task?.phase ?? defaults.phase ?? lookup.projects[initialProject]?.phase ?? "idea",
     assigneeId: task?.assigneeId ?? defaults.assigneeId ?? currentUserId,
     dueDate: task?.dueDate ?? defaults.dueDate ?? "",
+    priority: task ? taskPriority(task) : defaults.priority ?? DEFAULT_TASK_PRIORITY,
     status: task?.status ?? "todo",
   });
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
@@ -157,6 +162,9 @@ function TaskForm({ task, defaults = {}, onClose }) {
           <Field label="Title" error={fieldErrors.title}>
             {(p) => <Input {...p} value={values.title} onChange={set("title")} data-autofocus autoComplete="off" />}
           </Field>
+          <Field label="Description" hint="Optional. What needs doing, links, acceptance criteria." error={fieldErrors.description}>
+            {(p) => <Textarea {...p} rows={3} value={values.description} onChange={set("description")} maxLength={5000} />}
+          </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Project" error={fieldErrors.projectId}>
               {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
@@ -170,12 +178,16 @@ function TaskForm({ task, defaults = {}, onClose }) {
             <Field label="Due date" error={fieldErrors.dueDate}>
               {(p) => <Input {...p} type="date" value={values.dueDate} onChange={set("dueDate")} />}
             </Field>
+            <Field label="Priority" error={fieldErrors.priority}>
+              {(p) => <Select {...p} value={values.priority} onChange={set("priority")} options={TASK_PRIORITIES.map((v) => ({ value: v, label: TASK_PRIORITY_LABELS[v] }))} />}
+            </Field>
             {task && (
               <Field label="Status" error={fieldErrors.status}>
                 {(p) => <Select {...p} value={values.status} onChange={set("status")} options={TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] }))} />}
               </Field>
             )}
           </div>
+          {task && <DiscussionLink taskId={task._id} onClick={onClose} />}
         </form>
       </Dialog>
       <ConfirmDialog
@@ -189,6 +201,17 @@ function TaskForm({ task, defaults = {}, onClose }) {
         confirmLabel="Delete task"
       />
     </>
+  );
+}
+
+/** Link to the task's page, where its discussion is. Closes the dialog on the way. */
+function DiscussionLink({ taskId, onClick }) {
+  const { count, unread } = useTaskThreadSummary(taskId);
+  return (
+    <Link href={`/tasks/${taskId}`} onClick={onClick} className="flex items-center gap-2 self-start text-[13px] text-accent hover:text-accent-light">
+      <MessageSquare className="size-4" aria-hidden />
+      {count ? `Open discussion · ${pluralize(count, "comment")}${unread ? ` (${unread} new)` : ""}` : "Open the task page to discuss it"}
+    </Link>
   );
 }
 

@@ -221,7 +221,7 @@ test("notification list: who, what, where, and mark all read", () => {
   act({ type: "task.create", data: { title: "Fix login", projectId: "prj_jajabor", assigneeId: "usr_sara" } });
   const mine = myNotifications(inbox, "usr_sara");
   assert.equal(mine.length, before + 2);
-  assert.deepEqual(mine[0].view, { actorId: "usr_alex", text: "Alex Morgan assigned you a task", detail: "Fix login", href: "/tasks" }, "newest first");
+  assert.deepEqual(mine[0].view, { actorId: "usr_alex", text: "Alex Morgan assigned you a task", detail: "Fix login", href: `/tasks/${mine[0].targetId}` }, "newest first");
   assert.equal(mine[1].view.text, "Alex Morgan mentioned you in # Jajabor");
   assert.equal(mine[1].view.href, "/projects/prj_jajabor?tab=chat");
   assert.equal(mine[0].actorId, "usr_alex", "notifications record who caused them");
@@ -230,6 +230,81 @@ test("notification list: who, what, where, and mark all read", () => {
   act({ type: "notification.readAll" }, "usr_sara");
   assert.ok(myNotifications(inbox, "usr_sara").every((n) => n.readAt));
   assert.ok(inbox.notifications.some((n) => n.userId !== "usr_sara" && !n.readAt), "only your own are marked read");
+});
+
+test("task permissions: creator and admins edit, the assignee only moves status", () => {
+  // Sara (member) creates a task for Tanvir (member). Alex is an admin.
+  const task = run({ type: "task.create", data: { title: "Draft copy", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, as("usr_sara"));
+  const forbidden = (e) => assert.equal(e.status, 403);
+
+  fails({ type: "task.update", id: task._id, data: { title: "Renamed" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.update", id: task._id, data: { dueDate: today } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.update", id: task._id, data: { assigneeId: "usr_sara" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.update", id: task._id, data: { priority: "high" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.update", id: task._id, data: { description: "Rewritten" } }, forbidden, as("usr_tanvir"));
+  assert.equal(task.description, "", "the description is optional");
+  assert.equal(task.priority, "medium", "new tasks default to medium priority");
+  fails({ type: "task.delete", id: task._id }, forbidden, as("usr_tanvir"));
+  assert.equal(run({ type: "task.update", id: task._id, data: { status: "doing" } }, as("usr_tanvir")).status, "doing", "the assignee moves the status");
+  assert.equal(run({ type: "task.toggle", id: task._id, data: { done: true } }, as("usr_tanvir")).status, "done");
+  // Saving the full form unchanged except for status is allowed too.
+  const { _id, orgId, createdAt, updatedAt, completedAt, createdBy, source, ...form } = state.tasks.find((t) => t._id === task._id);
+  assert.equal(run({ type: "task.update", id: task._id, data: { ...form, status: "todo" } }, as("usr_tanvir")).status, "todo");
+
+  fails({ type: "task.toggle", id: task._id, data: { done: true } }, forbidden, as("usr_nadia"));
+  fails({ type: "task.update", id: task._id, data: { title: "Mine now" } }, forbidden, as("usr_nadia"));
+  run({ type: "task.comment", id: task._id, data: { body: "Can I help?" } }, as("usr_nadia"));
+
+  assert.equal(run({ type: "task.update", id: task._id, data: { title: "Draft landing copy" } }, as("usr_sara")).title, "Draft landing copy", "the creator edits");
+  assert.equal(run({ type: "task.update", id: task._id, data: { dueDate: today } }).dueDate, today, "admins edit");
+  assert.equal(run({ type: "task.update", id: task._id, data: { priority: "high" } }, as("usr_sara")).priority, "high");
+  assert.equal(run({ type: "task.update", id: task._id, data: { description: "  Hero, pricing and FAQ sections  " } }, as("usr_sara")).description, "Hero, pricing and FAQ sections", "trimmed");
+  fails({ type: "task.update", id: task._id, data: { description: "x".repeat(5001) } }, (e) => assert.ok(e.fieldErrors.description), as("usr_sara"));
+  // Tasks saved before descriptions existed can still have their status moved by the assignee.
+  state = { ...state, tasks: state.tasks.map((t) => (t._id === task._id ? { ...t, description: undefined } : t)) };
+  assert.equal(run({ type: "task.update", id: task._id, data: { status: "todo" } }, as("usr_tanvir")).status, "todo");
+  // A task saved before priorities existed can still have its status moved by the assignee.
+  state = { ...state, tasks: state.tasks.map((t) => (t._id === task._id ? { ...t, priority: undefined } : t)) };
+  assert.equal(run({ type: "task.update", id: task._id, data: { status: "doing" } }, as("usr_tanvir")).status, "doing");
+  run({ type: "task.delete", id: task._id }, as("usr_sara"));
+});
+
+test("task discussions: comments notify followers and are removed with the task", () => {
+  // Alex creates a task for Tanvir in Jajabor (members: Alex, Sara, Tanvir).
+  const task = run({ type: "task.create", data: { title: "Payment webhook", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } });
+  const notes = (userId) => state.notifications.filter((n) => n.userId === userId && n.type === "taskComment");
+
+  const first = run({ type: "task.comment", id: task._id, data: { body: "Blocked: no sandbox keys yet" } }, as("usr_tanvir"));
+  const thread = state.conversations.find((c) => c.type === "task" && c.taskId === task._id);
+  assert.ok(thread, "the discussion starts with the first comment");
+  assert.equal(first.conversationId, thread._id);
+  assert.equal(notes("usr_alex").length, 1, "the task's creator hears about it");
+  assert.equal(notes("usr_tanvir").length, 0, "not the author");
+
+  // Sara joins in and mentions Alex: Alex gets one mention (not a second comment notification); Tanvir and Sara follow.
+  const reply = run({ type: "task.comment", id: task._id, data: { body: "@Alex can you share the keys?" } }, as("usr_sara"));
+  assert.deepEqual(reply.mentions, ["usr_alex"]);
+  assert.equal(notes("usr_alex").length, 1);
+  assert.ok(state.notifications.some((n) => n.userId === "usr_alex" && n.type === "mention" && n.targetId === reply._id));
+  assert.equal(notes("usr_tanvir").length, 1, "the assignee hears about it");
+
+  run({ type: "task.comment", id: task._id, data: { body: "Sent them over" } });
+  assert.equal(notes("usr_sara").length, 1, "earlier commenters follow the discussion");
+  fails({ type: "task.comment", id: task._id, data: { body: "  " } });
+
+  // Posting through the chat action still notifies followers.
+  run({ type: "message.create", id: thread._id, data: { body: "Thanks, unblocked" } }, as("usr_tanvir"));
+  assert.equal(notes("usr_sara").length, 2);
+
+  // The shared test state stamps every action with the same time, so look it up rather than take the newest.
+  const view = myNotifications(state, "usr_sara").find((n) => n.type === "taskComment" && n.actorId === "usr_tanvir");
+  assert.equal(view.view.text, "Tanvir Karim commented on “Payment webhook”");
+  assert.equal(view.view.href, `/tasks/${task._id}`, "opens the task's page");
+
+  run({ type: "task.delete", id: task._id });
+  assert.ok(!state.conversations.some((c) => c._id === thread._id), "discussion removed with the task");
+  assert.ok(!state.messages.some((m) => m.conversationId === thread._id));
+  assert.ok(!state.notifications.some((n) => n.type === "taskComment"));
 });
 
 test("mention suggestions and picked names resolve to the right person", () => {
@@ -357,7 +432,7 @@ test("notification emails follow each person's settings", () => {
   let { emails } = send({ type: "task.create", data: { title: "Fix <b>login</b>", projectId: "prj_jajabor", assigneeId: "usr_tanvir", dueDate: today } });
   assert.deepEqual(emails.map((e) => [e.to, e.subject]), [["tanvir@macrokite.dev", "Alex Morgan assigned you: Fix <b>login</b>"]]);
   assert.ok(emails[0].html.includes("Fix &lt;b&gt;login&lt;/b&gt;"), "content is escaped in HTML");
-  assert.ok(emails[0].text.includes("https://app.test/tasks"));
+  assert.ok(emails[0].text.includes(`https://app.test/tasks/${mail.tasks.at(-1)._id}`), "links to the task page");
   assert.equal(send({ type: "task.create", data: { title: "Mine", projectId: "prj_jajabor" } }).emails.length, 0, "no email about your own actions");
   setPrefs("usr_tanvir", { assignment: false, meetingInvite: true });
   assert.equal(send({ type: "task.create", data: { title: "Quiet", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }).emails.length, 0, "turned off in Settings");

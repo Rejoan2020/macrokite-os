@@ -2,7 +2,7 @@ import { FORMER_MEMBER, TEAM_CHANNEL } from "./constants";
 
 /**
  * What a notification says and where it leads, from the current snapshot. Pure, shared by the
- * notification list and the tests. Returns { actor, text, detail, href }, or null when what it
+ * notification list and the tests. Returns { actorId, text, detail, href }, or null when what it
  * points to no longer exists (a deleted task or meeting).
  */
 export function describeNotification(n, data) {
@@ -15,6 +15,12 @@ export function describeNotification(n, data) {
     if (!conversation) return null;
     const actorId = n.actorId ?? message.authorId;
     const detail = message.deletedAt ? "Message deleted" : message.body;
+    if (conversation.type === "task") {
+      const task = byId("tasks", conversation.taskId);
+      if (!task) return null;
+      const verb = n.type === "mention" ? "mentioned you on" : "commented on";
+      return { actorId, text: `${userName(actorId)} ${verb} “${task.title}”`, detail, href: `/tasks/${task._id}` };
+    }
     if (n.type === "dm") return { actorId, text: `${userName(actorId)} sent you a message`, detail, href: `/messages/${actorId}` };
     const project = conversation.type === "project" ? byId("projects", conversation.projectId) : null;
     const place = conversation.type === "general" ? TEAM_CHANNEL : project ? `# ${project.name}` : "a message";
@@ -26,7 +32,7 @@ export function describeNotification(n, data) {
     const task = byId("tasks", n.targetId);
     if (!task) return null;
     const actorId = n.actorId ?? task.createdBy;
-    return { actorId, text: `${userName(actorId)} assigned you a task`, detail: task.title, href: "/tasks" };
+    return { actorId, text: `${userName(actorId)} assigned you a task`, detail: task.title, href: `/tasks/${task._id}` };
   }
 
   if (n.targetType === "meeting") {

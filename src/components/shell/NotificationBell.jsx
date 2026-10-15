@@ -97,7 +97,7 @@ export function NotificationBell({ align = "left" }) {
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-[13px] text-muted">No notifications yet. Mentions, messages, assignments and meeting invites show up here.</p>
+            <p className="px-4 py-6 text-center text-[13px] text-muted">No notifications yet. Mentions, messages, task comments, assignments and meeting invites show up here.</p>
           )}
         </div>
       )}

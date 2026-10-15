@@ -117,9 +117,11 @@ export function WorkspaceProvider({ children }) {
     const general = data.conversations.find((c) => c.type === "general");
     const projectChats = {};
     const dms = {};
+    const tasks = {}; // task discussions by taskId
     for (const c of data.conversations) {
       if (c.type === "project") projectChats[c.projectId] = c;
       if (c.type === "dm" && c.memberIds.includes(currentUserId)) dms[c.memberIds.find((id) => id !== currentUserId) ?? currentUserId] = c;
+      if (c.type === "task") tasks[c.taskId] = c;
     }
     const currentUser = users[currentUserId];
     return {
@@ -137,7 +139,7 @@ export function WorkspaceProvider({ children }) {
       isAdmin: currentUser?.role === "admin",
       activeUsers: data.users.filter((u) => u.active),
       unread: unreadByConversation(data, currentUserId),
-      chats: { general, projects: projectChats, dms },
+      chats: { general, projects: projectChats, dms, tasks },
       lookup: {
         users,
         projects: indexById(data.projects),

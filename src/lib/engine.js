@@ -10,10 +10,11 @@ import {
   taskInput,
   workspaceInput,
 } from "./schemas";
-import { FORMER_MEMBER, nextPhase, phaseLabel } from "./constants";
+import { FORMER_MEMBER, nextPhase, phaseLabel, taskPriority } from "./constants";
 import { parseMentions } from "./text";
 import { conversationMemberIds, readStateId } from "./selectors";
 import { pluralize } from "./format";
+import { canEditTask, canSetTaskStatus, TASK_DETAIL_FIELDS } from "./permissions";
 
 /**
  * The domain engine applies one action to an organization snapshot.
@@ -95,6 +96,16 @@ function createTx(snapshot, ctx) {
   return tx;
 }
 
+const FORBIDDEN_TASK = "Only the person who created this task or an admin can change it.";
+
+function requireTaskEdit(tx, task) {
+  if (!canEditTask(task, tx.me())) throw new DomainError(FORBIDDEN_TASK, { status: 403 });
+}
+
+function requireTaskStatus(tx, task) {
+  if (!canSetTaskStatus(task, tx.me())) throw new DomainError("Only the assignee, the person who created this task or an admin can change its status.", { status: 403 });
+}
+
 function requireAdmin(tx) {
   if (tx.me()?.role !== "admin") throw new DomainError("Only admins can do that.", { status: 403 });
 }
@@ -116,6 +127,8 @@ function findProject(tx, id, field = "projectId") {
 function conversationFor(tx, projectId) {
   return tx.state.conversations.find((c) => c.type === "project" && c.projectId === projectId);
 }
+
+const taskThreadFor = (tx, taskId) => tx.state.conversations.find((c) => c.type === "task" && c.taskId === taskId);
 
 function markRead(tx, conversationId, userId) {
   const _id = readStateId(conversationId, userId);
@@ -223,6 +236,9 @@ const handlers = {
   "task.update"(tx, ctx, { id, data }) {
     const current = tx.find("tasks", id, "Task");
     const input = parse(taskInput, { ...current, ...data });
+    const before = { ...current, priority: taskPriority(current) };
+    if (TASK_DETAIL_FIELDS.some((field) => (input[field] ?? "") !== (before[field] ?? ""))) requireTaskEdit(tx, current);
+    if (input.status !== current.status) requireTaskStatus(tx, current);
     findProject(tx, input.projectId);
     activeUserIds(tx, [input.assigneeId], "assigneeId", [current.assigneeId]);
     const task = tx.put("tasks", {
@@ -239,13 +255,40 @@ const handlers = {
   },
   "task.toggle"(tx, ctx, { id, data }) {
     const current = tx.find("tasks", id, "Task");
+    requireTaskStatus(tx, current);
     const done = Boolean(data?.done);
     return tx.put("tasks", { ...current, status: done ? "done" : "todo", completedAt: done ? tx.now : null, updatedAt: tx.now });
   },
   "task.delete"(tx, ctx, { id }) {
-    tx.find("tasks", id, "Task");
+    requireTaskEdit(tx, tx.find("tasks", id, "Task"));
     tx.remove("tasks", [id]);
+    // The task's discussion goes with it.
+    const thread = taskThreadFor(tx, id);
+    if (thread) {
+      const messageIds = new Set(tx.state.messages.filter((m) => m.conversationId === thread._id).map((m) => m._id));
+      tx.remove("notifications", tx.state.notifications.filter((n) => n.targetType === "message" && messageIds.has(n.targetId)).map((n) => n._id));
+      tx.remove("readStates", tx.state.readStates.filter((r) => r.conversationId === thread._id).map((r) => r._id));
+      tx.remove("messages", [...messageIds]);
+      tx.remove("conversations", [thread._id]);
+    }
     return { _id: id };
+  },
+  /**
+   * Adds a comment to a task's discussion, creating it with the first comment. Mentions work as in
+   * chat; the assignee, the task's creator and earlier commenters are notified as well.
+   */
+  "task.comment"(tx, ctx, { id, data }) {
+    const task = tx.find("tasks", id, "Task");
+    const { body } = parse(messageInput, data);
+    const earlier = taskThreadFor(tx, id);
+    const thread = earlier ?? tx.create("conversations", "cnv", { type: "task", projectId: task.projectId, taskId: id, memberIds: [], createdAt: tx.now });
+    const commenters = earlier ? tx.state.messages.filter((m) => m.conversationId === earlier._id).map((m) => m.authorId) : [];
+    const message = postMessage(tx, ctx, thread, body);
+    const following = new Set([task.assigneeId, task.createdBy, ...commenters]);
+    for (const userId of following) {
+      if (!message.mentions.includes(userId)) tx.notify(userId, "taskComment", "message", message._id);
+    }
+    return message;
   },
 
   // --------------------------------------------------------------- meetings
@@ -346,6 +389,8 @@ const handlers = {
     if (conversation.type === "dm" && !conversation.memberIds.includes(ctx.userId)) {
       throw new DomainError("Conversation not found.", { status: 404 });
     }
+    // Task discussions also notify the people following the task.
+    if (conversation.type === "task") return handlers["task.comment"](tx, ctx, { id: conversation.taskId, data });
     const { body } = parse(messageInput, data);
     return postMessage(tx, ctx, conversation, body);
   },

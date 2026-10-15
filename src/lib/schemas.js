@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PHASES, ROLES, TASK_SOURCES, TASK_STATUSES } from "./constants";
+import { DEFAULT_TASK_PRIORITY, PHASES, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
 
 // Input schemas shared by demo mode (browser) and database mode (route handlers).
 // They describe what a caller may submit, never server-owned fields (ids, orgId, timestamps).
@@ -52,8 +52,10 @@ export const taskInput = z.object({
   projectId: z.string({ message: "Choose a project" }).trim().min(1, "Choose a project").max(64),
   phase: z.enum(PHASES, { message: "Choose a phase" }),
   title: required("Title", 200),
+  description: text(5000).default(""),
   assigneeId: z.string({ message: "Choose who is doing this" }).trim().min(1, "Choose who is doing this").max(64),
   status: z.enum(TASK_STATUSES, { message: "Choose a status" }),
+  priority: z.enum(TASK_PRIORITIES, { message: "Choose a priority" }).default(DEFAULT_TASK_PRIORITY),
   dueDate: isoDate,
   source: z.enum(TASK_SOURCES).default("manual"),
   meetingId: optionalId,

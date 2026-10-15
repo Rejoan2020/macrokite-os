@@ -1,4 +1,4 @@
-import { DEFAULT_NOTIFICATION_PREFS, FORMER_MEMBER } from "./constants";
+import { DEFAULT_NOTIFICATION_PREFS, FORMER_MEMBER, TASK_PRIORITY_LABELS, taskPriority } from "./constants";
 import { formatShortDate } from "./format";
 
 /**
@@ -99,8 +99,9 @@ function buildNotification(n, { state, byId, actorName, appUrl, timeZone }) {
     const task = byId("tasks", n.targetId);
     if (!task) return null;
     const project = byId("projects", task.projectId);
-    const items = [project && `Project: ${project.name}`, task.dueDate && `Due: ${formatShortDate(task.dueDate)}`].filter(Boolean);
-    return { subject: `${actorName} assigned you: ${task.title}`, body: { intro: `${actorName} assigned you a task: ${task.title}`, items, button: { label: "Open my tasks", href: appUrl("/tasks") } } };
+    const description = task.description && (task.description.length > 300 ? `${task.description.slice(0, 300).trimEnd()}…` : task.description);
+    const items = [description && `Details: ${description}`, project && `Project: ${project.name}`, task.dueDate && `Due: ${formatShortDate(task.dueDate)}`, `Priority: ${TASK_PRIORITY_LABELS[taskPriority(task)]}`].filter(Boolean);
+    return { subject: `${actorName} assigned you: ${task.title}`, body: { intro: `${actorName} assigned you a task: ${task.title}`, items, button: { label: "Open the task", href: appUrl(`/tasks/${task._id}`) } } };
   }
   if (n.targetType === "meeting") {
     const meeting = byId("meetings", n.targetId);

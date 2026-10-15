@@ -105,7 +105,8 @@ export function buildSeed(now = new Date()) {
   ];
 
   const task = (_id, projectId, phase, title, assigneeId, status, due, extra = {}) => ({
-    _id, orgId, projectId, phase, title, assigneeId, status, dueDate: due === null ? "" : day(due), source: "manual", meetingId: null, messageId: null,
+    _id, orgId, projectId, phase, title, assigneeId, status, priority: due !== null && due < 0 && status !== "done" ? "high" : due === null ? "low" : "medium",
+    dueDate: due === null ? "" : day(due), source: "manual", meetingId: null, messageId: null,
     completedAt: status === "done" ? on(-20, 16) : null, createdBy: A, createdAt: created, updatedAt: created, ...extra,
   });
   const fromMeeting = (meetingId) => ({ source: "meeting", meetingId });

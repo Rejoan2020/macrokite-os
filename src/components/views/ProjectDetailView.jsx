@@ -6,7 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { Plus } from "lucide-react";
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { TaskRow } from "@/components/tasks/TaskRow";
+import { TaskListHead, TaskRow } from "@/components/tasks/TaskRow";
 import { ChannelMessage, Composer, conversationMessages, MessageText, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
 import { MeetingRow } from "@/components/views/MeetingsView";
 import { Button, Card, cx, EmptyNote, OnHoldPill, Page, Pill, TabGroup } from "@/components/ui/primitives";
@@ -200,6 +200,7 @@ function TasksTab({ project, tasks }) {
 
   return (
     <div className="flex flex-col gap-3">
+      <TaskListHead className="px-px" />
       <section aria-labelledby="t-current" className="overflow-hidden rounded-xl border border-decision-line bg-card">
         <div className="flex items-center justify-between gap-2.5 border-b border-line px-[18px] py-3">
           <h3 id="t-current" className="text-[13px] font-semibold text-accent-light">
@@ -210,9 +211,9 @@ function TasksTab({ project, tasks }) {
           </span>
         </div>
         {now.open.map((t) => (
-          <TaskRow key={t._id} task={t} meta="source" showAssignee />
+          <TaskRow key={t._id} task={t} meta="source" />
         ))}
-        {showDone && now.done.map((t) => <TaskRow key={t._id} task={t} meta="source" showAssignee />)}
+        {showDone && now.done.map((t) => <TaskRow key={t._id} task={t} meta="source" />)}
         {now.open.length === 0 && !showDone && (
           <div className="flex flex-wrap items-center justify-between gap-2 px-[18px] py-3.5 text-muted">
             Nothing open in {phaseLabel(project.phase)}.
@@ -254,7 +255,7 @@ function TasksTab({ project, tasks }) {
                 {open && (
                   <div className="border-t border-row">
                     {[...g.open, ...g.done].map((t) => (
-                      <TaskRow key={t._id} task={t} meta="source" showAssignee />
+                      <TaskRow key={t._id} task={t} meta="source" />
                     ))}
                   </div>
                 )}

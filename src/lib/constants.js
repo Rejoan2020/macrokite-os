@@ -17,9 +17,14 @@ export const ROLE_LABELS = { admin: "Admin", member: "Member" };
 export const TASK_STATUSES = ["todo", "doing", "done"];
 export const TASK_STATUS_LABELS = { todo: "To do", doing: "Doing", done: "Done" };
 export const TASK_SOURCES = ["manual", "meeting", "message"];
+export const TASK_PRIORITIES = ["high", "medium", "low"];
+export const TASK_PRIORITY_LABELS = { high: "High", medium: "Medium", low: "Low" };
+export const DEFAULT_TASK_PRIORITY = "medium";
+// Tasks saved before priorities existed count as the default.
+export const taskPriority = (task) => task.priority ?? DEFAULT_TASK_PRIORITY;
 
-export const CONVERSATION_TYPES = ["project", "general", "dm"];
-export const NOTIFICATION_TYPES = ["mention", "assignment", "meetingInvite", "dm"];
+export const CONVERSATION_TYPES = ["project", "general", "dm", "task"];
+export const NOTIFICATION_TYPES = ["mention", "assignment", "meetingInvite", "dm", "taskComment"];
 
 // Email notifications. Mentions and direct messages are in-app only.
 export const NOTIFICATION_PREFS = [
