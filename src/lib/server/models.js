@@ -43,7 +43,8 @@ export const User = model(
   [[{ orgId: 1, email: 1 }, { unique: true }], { authId: 1 }, { email: 1 }]
 );
 
-export const Invite = model("Invite", { orgId, email: String, invitedBy: String, createdAt: String, sentAt: String, acceptedAt: ref }, [
+// workosInvitationId: the emailed WorkOS invitation, so it can be resent or revoked.
+export const Invite = model("Invite", { orgId, email: String, invitedBy: String, createdAt: String, sentAt: String, acceptedAt: ref, workosInvitationId: ref }, [
   { email: 1, acceptedAt: 1 },
 ]);
 

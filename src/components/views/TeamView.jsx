@@ -7,7 +7,8 @@ import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { Avatar, Button, Page, PageHeader, Pill, Summary, TextLink } from "@/components/ui/primitives";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { useAction } from "@/lib/client/useAction";
+import { announceInvite, useAction } from "@/lib/client/useAction";
+import { useToast } from "@/components/providers/ToastProvider";
 import { ROLES, ROLE_LABELS } from "@/lib/constants";
 import { formatDaysAgo, pluralize } from "@/lib/format";
 
@@ -17,6 +18,7 @@ export function TeamView() {
   const { data, currentUserId, isAdmin } = useWorkspace();
   const overlays = useOverlays();
   const { run, busy } = useAction();
+  const toast = useToast();
   const [removing, setRemoving] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
@@ -128,7 +130,10 @@ export function TeamView() {
                     <button type="button" onClick={() => run({ type: "invite.cancel", id: invite._id }, { success: "Invite cancelled" })} className="text-[13px] text-muted hover:text-danger">
                       Cancel
                     </button>
-                    <Button variant="quiet" size="sm" onClick={() => run({ type: "invite.resend", id: invite._id }, { success: "Invite resent", successDescription: invite.email })}>
+                    <Button variant="quiet" size="sm" onClick={async () => {
+                        const resent = await run({ type: "invite.resend", id: invite._id });
+                        if (resent) announceInvite(toast, resent, "Invite resent");
+                      }}>
                       Resend
                     </Button>
                   </>
