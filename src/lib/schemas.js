@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { DEFAULT_TASK_PRIORITY, PHASES, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
+import { DEFAULT_TASK_PRIORITY, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
+import { MAX_PHASES } from "./phases";
 
 // Input schemas shared by demo mode (browser) and database mode (route handlers).
 // They describe what a caller may submit, never server-owned fields (ids, orgId, timestamps).
@@ -38,19 +39,28 @@ const httpUrl = (label) =>
     .nullish()
     .transform((v) => v || "");
 const ids = z.array(id).max(100).default([]).transform((list) => [...new Set(list)]);
+// A phase id from the project's own phases; the engine checks it belongs to that project.
+const phaseId = z.string({ message: "Choose a phase" }).trim().min(1, "Choose a phase").max(64);
+// A project's phases, in order. New phases come without an _id; the engine assigns one.
+const phaseList = z
+  .array(z.object({ _id: z.string().trim().max(64).optional(), name: required("Phase name", 40) }))
+  .min(1, "Add at least one phase")
+  .max(MAX_PHASES, `Use ${MAX_PHASES} phases or fewer`);
 
 export const projectInput = z.object({
   name: required("Project name", 140),
   description: text(240).default(""),
-  phase: z.enum(PHASES, { message: "Choose a phase" }),
+  phase: phaseId.optional(),
+  phases: phaseList.optional(),
   deadline: isoDate,
   memberIds: ids,
+  leadIds: ids,
   notes: text(20000).default(""),
 });
 
 export const taskInput = z.object({
   projectId: z.string({ message: "Choose a project" }).trim().min(1, "Choose a project").max(64),
-  phase: z.enum(PHASES, { message: "Choose a phase" }),
+  phase: phaseId,
   title: required("Title", 200),
   description: text(5000).default(""),
   assigneeId: z.string({ message: "Choose who is doing this" }).trim().min(1, "Choose who is doing this").max(64),

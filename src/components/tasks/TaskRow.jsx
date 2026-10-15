@@ -5,7 +5,8 @@ import { Check, MessageSquare } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useAction } from "@/lib/client/useAction";
 import { Avatar, cx } from "@/components/ui/primitives";
-import { FORMER_MEMBER, phaseLabel, TASK_PRIORITY_LABELS, taskPriority } from "@/lib/constants";
+import { FORMER_MEMBER, TASK_PRIORITY_LABELS, taskPriority } from "@/lib/constants";
+import { phaseName } from "@/lib/phases";
 import { firstName, formatDue, formatShortDate, todayISO } from "@/lib/format";
 import { isOverdue } from "@/lib/selectors";
 import { useOpenTask, useTaskAccess, useTaskThreadSummary } from "./taskHooks";
@@ -64,7 +65,7 @@ function StatusBox({ checked, onClick, disabled, label }) {
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      title={disabled ? "Only the assignee, the person who created it or an admin can change this" : label}
+      title={disabled ? "Only the assignee, this project’s leads or an admin can change this" : label}
       className={cx(
         "flex size-8 items-center justify-center rounded-lg border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 @2xl:size-10",
         checked ? "border-accent bg-accent-tint text-accent" : "border-line text-transparent enabled:hover:border-secondary"
@@ -118,7 +119,7 @@ export function TaskRow({ task, meta = "full", who: whoShown = "assignee", class
   const setStatus = (box) => box.status !== task.status && run({ type: "task.update", id: task._id, data: { status: box.status } }, { success: box.toast });
 
   const metaParts = [];
-  if (meta !== "source" && project) metaParts.push(`${project.name} · ${phaseLabel(task.phase)}`);
+  if (meta !== "source" && project) metaParts.push(`${project.name} · ${phaseName(project, task.phase)}`);
   const source = meeting && meta !== "project" && (
     <Link href={`/meetings/${meeting._id}`} className="text-accent hover:text-accent-light">
       from {meeting.title}, {formatShortDate(meeting.startsAt.slice(0, 10))}

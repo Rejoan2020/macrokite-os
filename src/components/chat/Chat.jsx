@@ -8,6 +8,7 @@ import { useAction } from "@/lib/client/useAction";
 import { Avatar, Button, cx, DayDivider } from "@/components/ui/primitives";
 import { formatDay, formatTime, todayISO } from "@/lib/format";
 import { mentionHandle, mentionSuggestions, socialLinks, tokenize } from "@/lib/text";
+import { canManageTasks } from "@/lib/permissions";
 
 /** Marks a conversation read whenever it is on screen with unread messages. */
 export function useMarkRead(conversationId) {
@@ -118,9 +119,15 @@ export function LinkCards({ body }) {
   ));
 }
 
-/** "Create task from message" — opens the task dialog prefilled from the message. */
+/**
+ * "Create task from message": opens the task dialog prefilled from the message. Null when the
+ * current user can't create tasks there (only project leads and admins can), so callers hide it.
+ */
 export function useTaskFromMessage(projectId) {
   const overlays = useOverlays();
+  const { lookup, currentUser, data } = useWorkspace();
+  const allowed = projectId ? canManageTasks(lookup.projects[projectId], currentUser) : data.projects.some((p) => !p.archived && canManageTasks(p, currentUser));
+  if (!allowed) return null;
   return (message) =>
     overlays.newTask({
       title: message.body.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 200),

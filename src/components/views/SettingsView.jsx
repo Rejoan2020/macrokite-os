@@ -117,7 +117,7 @@ export function SettingsView() {
               {(p) => <Input {...p} value={values.workspaceName} onChange={(e) => setValues((v) => ({ ...v, workspaceName: e.target.value }))} />}
             </Field>
             <div className="flex flex-col gap-2">
-              <span className="text-[13px] text-secondary">Lifecycle phases</span>
+              <span className="text-[13px] text-secondary">Standard phases</span>
               <div className="flex flex-wrap gap-1.5">
                 {PHASES.map((p) => (
                   <span key={p} className="rounded-md border border-line px-2.5 py-[5px] text-xs text-soft">
@@ -125,7 +125,7 @@ export function SettingsView() {
                   </span>
                 ))}
               </div>
-              <span className="text-xs text-faint">Fixed for every project in v1</span>
+              <span className="text-xs text-faint">New projects start with these. Admins can rename, add, remove and reorder phases for each project.</span>
             </div>
           </Card>
         )}

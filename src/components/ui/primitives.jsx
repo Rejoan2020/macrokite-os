@@ -4,7 +4,7 @@ import Link from "next/link";
 import { forwardRef } from "react";
 import { Loader2, Search } from "lucide-react";
 import { initials } from "@/lib/format";
-import { PHASES, phaseIndex } from "@/lib/constants";
+import { phaseIndexIn, projectPhases } from "@/lib/phases";
 
 export const cx = (...classes) => classes.filter(Boolean).join(" ");
 
@@ -201,14 +201,16 @@ export function SectionLabel({ as: Tag = "h2", className, children, ...props }) 
   );
 }
 
-/** 7-segment lifecycle bar. Done segments filled, current in the light accent, later empty; greys when on hold. */
-export function PhaseBar({ phase, onHold, height = 6, className }) {
-  const current = phaseIndex(phase);
+/** A project's lifecycle bar, one segment per phase. Done segments filled, current in the light accent, later empty; greys when on hold. */
+export function PhaseBar({ project, height = 6, className }) {
+  const phases = projectPhases(project);
+  const current = phaseIndexIn(project, project.phase);
+  const onHold = project.onHold;
   return (
-    <span aria-hidden className={cx("grid grid-cols-7 gap-[3px]", className)}>
-      {PHASES.map((p, i) => (
+    <span aria-hidden className={cx("grid gap-[3px]", className)} style={{ gridTemplateColumns: `repeat(${phases.length}, minmax(0, 1fr))` }}>
+      {phases.map((p, i) => (
         <span
-          key={p}
+          key={p._id}
           className="block"
           style={{
             height,
