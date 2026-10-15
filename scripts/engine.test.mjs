@@ -6,6 +6,7 @@ import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/li
 import { addDaysISO, todayISO } from "../src/lib/format.js";
 import { parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
 import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember } from "../src/lib/membership.js";
+import { notificationEmails } from "../src/lib/emails.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -171,10 +172,10 @@ test("workspace + profile; foreign org rejected", () => {
   fails({ type: "workspace.update", data: { name: "X" } }, (e) => assert.equal(e.status, 403), as("usr_sara"));
   run({ type: "workspace.update", data: { name: "Macrokite Studio" } });
   assert.equal(state.org.name, "Macrokite Studio");
-  run({ type: "profile.update", data: { name: "Alex M.", notificationPrefs: { mention: false, assignment: true, meetingInvite: true, dm: true } } });
+  run({ type: "profile.update", data: { name: "Alex M.", notificationPrefs: { assignment: false, meetingInvite: true } } });
   const me = state.users.find((u) => u._id === SEED_OWNER_ID);
   assert.equal(me.name, "Alex M.");
-  assert.equal(me.notificationPrefs.mention, false);
+  assert.deepEqual(me.notificationPrefs, { assignment: false, meetingInvite: true });
   assert.equal(me.role, "admin", "profile updates cannot change role");
   fails({ type: "profile.update", data: { avatarUrl: "ftp://x" } }, (e) => assert.ok(e.fieldErrors.avatarUrl));
   assert.throws(() => applyAction(state, { type: "task.delete", id: "tsk_j1" }, { ...ctx, orgId: "org_other" }), DomainError);
@@ -281,6 +282,46 @@ test("a new workspace is usable by its creator", () => {
   assert.equal(next.messages.length, 1);
   applyAction(next, { type: "task.create", data: { projectId: built.projects[0]._id, title: "Set up billing" } }, wctx);
   applyAction(next, { type: "member.invite", data: { email: "cto@startup.io" } }, wctx);
+});
+
+test("notification emails follow each person's settings", () => {
+  let mail = buildSeed(new Date());
+  let k = 0;
+  // Each action gets a distinct "now", as real requests do.
+  const send = (action, userId = SEED_OWNER_ID) => {
+    const now = new Date(Date.now() + ++k * 1000);
+    const out = applyAction(mail, action, { orgId: SEED_ORG_ID, userId, now, newId: (p) => `${p}_m${k}_${Math.random().toString(36).slice(2, 8)}` });
+    mail = out.state;
+    const emails = notificationEmails({ state: out.state, changes: out.changes, action, actorId: userId, now, appUrl: (path) => `https://app.test${path}`, timeZone: "Asia/Dhaka" });
+    return { result: out.result, emails };
+  };
+  const setPrefs = (userId, prefs) => send({ type: "profile.update", data: { notificationPrefs: { ...prefs } } }, userId);
+
+  // Mentions and direct messages stay in-app.
+  assert.equal(send({ type: "message.create", id: "cnv_jajabor", data: { body: "@Sara can you check this?" } }).emails.length, 0);
+  assert.equal(send({ type: "dm.send", data: { userId: "usr_sara", body: "hi" } }).emails.length, 0);
+  assert.ok(mail.notifications.some((n) => n.userId === "usr_sara" && n.type === "mention"), "the in-app notification is still there");
+
+  let { emails } = send({ type: "task.create", data: { title: "Fix <b>login</b>", projectId: "prj_jajabor", assigneeId: "usr_tanvir", dueDate: today } });
+  assert.deepEqual(emails.map((e) => [e.to, e.subject]), [["tanvir@macrokite.dev", "Alex Morgan assigned you: Fix <b>login</b>"]]);
+  assert.ok(emails[0].html.includes("Fix &lt;b&gt;login&lt;/b&gt;"), "content is escaped in HTML");
+  assert.ok(emails[0].text.includes("https://app.test/tasks"));
+  assert.equal(send({ type: "task.create", data: { title: "Mine", projectId: "prj_jajabor" } }).emails.length, 0, "no email about your own actions");
+  setPrefs("usr_tanvir", { assignment: false, meetingInvite: true });
+  assert.equal(send({ type: "task.create", data: { title: "Quiet", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }).emails.length, 0, "turned off in Settings");
+  setPrefs("usr_tanvir", { assignment: true, meetingInvite: true });
+
+  // Meetings: invite emails, then one summary per attendee instead of action item emails.
+  const startsAt = new Date(Date.now() + 86_400_000).toISOString();
+  const { result: meeting, emails: invites } = send({ type: "meeting.create", data: { title: "Sprint review", projectId: "prj_jajabor", startsAt, attendeeIds: ["usr_alex", "usr_sara", "usr_tanvir"] } });
+  assert.deepEqual(invites.map((e) => e.to).sort(), ["sara@macrokite.dev", "tanvir@macrokite.dev"]);
+  assert.match(invites[0].text, /When: .*GMT\+6/, "meeting time uses the configured time zone");
+  send({ type: "decision.add", id: meeting._id, data: { text: "Ship on Friday" } });
+  assert.equal(send({ type: "task.create", data: { title: "Write release notes", projectId: "prj_jajabor", assigneeId: "usr_tanvir", meetingId: meeting._id } }).emails.length, 0, "announced when the meeting ends");
+  ({ emails } = send({ type: "meeting.end", id: meeting._id }));
+  assert.deepEqual(emails.map((e) => e.to).sort(), ["alex@macrokite.dev", "sara@macrokite.dev", "tanvir@macrokite.dev"]);
+  assert.ok(emails.every((e) => e.subject === "Summary: Sprint review"));
+  assert.ok(emails[0].text.includes("Decision: Ship on Friday") && emails[0].text.includes("Action item: Write release notes (Tanvir Karim)"));
 });
 
 console.log("\nall engine checks passed");

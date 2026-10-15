@@ -8,7 +8,7 @@ A minimal internal hub for the Macrokite team: project work, meetings and decisi
 
 The design spec and screen references live in [`macrokite-os-design/`](macrokite-os-design/DESIGN.md).
 
-> **Status: MVP with sign-in.** Database mode requires signing in (WorkOS: Google or email + password), and each account only sees its own workspace. Invite emails are sent by WorkOS; other email (notifications, meeting summaries), rate limiting and security headers are still to do before a public launch.
+> **Status: MVP with sign-in.** Database mode requires signing in (WorkOS: Google or email + password), and each account only sees its own workspace. Invites and notifications are emailed (WorkOS and SMTP); rate limiting and security headers are still to do before a public launch.
 
 ## Quick start
 
@@ -63,8 +63,9 @@ Database mode no longer seeds sample data. A database created by an earlier vers
 | `WORKOS_COOKIE_PASSWORD` | 32+ character secret that encrypts the session cookie. |
 | `NEXT_PUBLIC_WORKOS_REDIRECT_URI` | Sign-in callback, `<app url>/auth/callback`. Must be added in WorkOS. |
 | `MACROKITE_WORKSPACE_CREATORS` | Emails allowed to create workspaces (comma-separated), or `*`. Empty means nobody. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional SMTP server for the app's own email. Used for invites WorkOS won't send (to people who already have an account). For Gmail: `smtp.gmail.com`, port `465`, and an [app password](https://myaccount.google.com/apppasswords). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Optional SMTP server for the app's own email: assignment and meeting emails, and invites WorkOS won't send (to people who already have an account). Without it, notifications stay in-app only. For Gmail: `smtp.gmail.com`, port `465`, and an [app password](https://myaccount.google.com/apppasswords). |
 | `EMAIL_FROM` | Optional sender, e.g. `Macrokite OS <you@gmail.com>`. Defaults to `SMTP_USER`. |
+| `MACROKITE_TIME_ZONE` | Time zone for meeting times in emails, e.g. `Asia/Dhaka`. Defaults to UTC. |
 
 ## Scripts
 
@@ -127,9 +128,9 @@ Write requests must send `Content-Type: application/json` and may not come from 
 
 ## Known limitations
 
-- **Only invites send email.** WorkOS sends them first. It won't email someone who already has an account, so then the app sends its own invite over SMTP, if configured. If neither can send, the invite is still saved, the admin sees a notice, and that person still joins by signing in with the invited email.
+- **Invites:** WorkOS sends them first. It won't email someone who already has an account, so then the app sends its own invite over SMTP, if configured. If neither can send, the invite is still saved, the admin sees a notice, and that person still joins by signing in with the invited email.
 - **One workspace at a time.** Someone in several workspaces opens the oldest one; there is no workspace switcher yet.
-- **Notifications are in-app records only.** Email preferences are saved but no email is sent, including the end-of-meeting summary.
+- **Emails cover task assignments, meeting invites and meeting summaries**, need SMTP, and follow each person's Settings. Mentions and direct messages are in-app only. There are no meeting reminders yet (they need a scheduled job).
 - Database mode loads the organization's snapshot per request and serializes writes per server process. This is fine for a small team, not for large datasets or several server instances.
 - Chat updates use polling (database mode) and cross-tab sync (demo mode), not push.
 - Profile photos are image links. File uploads are out of scope for v1.
