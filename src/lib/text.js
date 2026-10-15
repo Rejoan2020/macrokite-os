@@ -19,6 +19,21 @@ export function matchUser(token, users) {
   return prefixed.length === 1 ? prefixed[0] : null;
 }
 
+/** What to type after @ for this user: the first name, or the full name when the first name is shared. */
+export function mentionHandle(user, users) {
+  const key = firstNameKey(user);
+  const shared = users.some((u) => u._id !== user._id && firstNameKey(u) === key);
+  return shared ? user.name.replace(/\s+/g, "") : user.name.split(/\s+/)[0];
+}
+
+/** People whose first name, any other name, or full name starts with `query`; empty matches everyone. */
+export function mentionSuggestions(query, users, limit = 6) {
+  const q = query.toLowerCase();
+  return users
+    .filter((u) => !q || u.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q)) || u.name.replace(/\s+/g, "").toLowerCase().startsWith(q))
+    .slice(0, limit);
+}
+
 const MENTION = /(^|[^\w@])@([A-Za-z][\w.-]*)/g;
 
 /** User ids mentioned in a message body, limited to `users`. */

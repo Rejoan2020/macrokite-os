@@ -126,6 +126,7 @@ export const Notification = model(
   {
     orgId,
     userId: String,
+    actorId: ref, // who caused it
     type: { type: String, enum: NOTIFICATION_TYPES },
     targetType: String,
     targetId: String,

@@ -4,12 +4,36 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { Menu, RefreshCw, X } from "lucide-react";
-import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { useBackgroundRefresh, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { OverlayProvider } from "@/components/providers/OverlayProvider";
 import { Avatar, Button, CountBadge, cx, Spinner } from "@/components/ui/primitives";
 import { isOpenTask } from "@/lib/selectors";
 import { Logo } from "./Logo";
 import { OnboardingScreen, SignOutButton } from "./AccountScreens";
+import { NotificationBell, useUnreadNotifications } from "./NotificationBell";
+
+const COUNT_PREFIX = /^\(\d+\+?\) /;
+
+/**
+ * Shows the unread notification count in the browser tab, e.g. "(3) Projects · Macrokite OS".
+ * Next.js sets the title on navigation, so the prefix is re-applied whenever the title changes.
+ */
+function useTitleCount(count) {
+  useEffect(() => {
+    const apply = () => {
+      const base = document.title.replace(COUNT_PREFIX, "");
+      const next = count ? `(${count > 99 ? "99+" : count}) ${base}` : base;
+      if (document.title !== next) document.title = next;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      document.title = document.title.replace(COUNT_PREFIX, "");
+    };
+  }, [count]);
+}
 
 const NAV = [
   [
@@ -69,6 +93,8 @@ function BootScreen() {
 
 function Shell({ children }) {
   const pathname = usePathname();
+  useBackgroundRefresh();
+  useTitleCount(useUnreadNotifications());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
@@ -121,6 +147,9 @@ function Shell({ children }) {
             <Menu className="size-5" />
           </button>
           <MobileTitle />
+          <div className="ml-auto">
+            <NotificationBell align="right" />
+          </div>
         </header>
         <main id="main" className="flex min-w-0 flex-1 flex-col">
           {children}
@@ -159,10 +188,15 @@ function Sidebar() {
 
   return (
     <div className="flex h-full flex-col px-3.5 py-5">
-      <Link href="/" className="flex items-center gap-2.5 px-2 pt-1 pb-5">
-        <Logo />
-        <span className="truncate text-[15px] font-semibold">{data.org.name}</span>
-      </Link>
+      <div className="flex items-center gap-2 pb-5">
+        <Link href="/" className="flex min-w-0 flex-1 items-center gap-2.5 px-2 pt-1">
+          <Logo />
+          <span className="truncate text-[15px] font-semibold">{data.org.name}</span>
+        </Link>
+        <span className="hidden lg:block">
+          <NotificationBell />
+        </span>
+      </div>
 
       <nav aria-label="Main" className="flex flex-1 flex-col gap-1 overflow-y-auto">
         {NAV.map((group, i) => (

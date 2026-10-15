@@ -119,10 +119,14 @@ async function persistChanges(org, changes) {
 
 const accountSummary = (identity) => ({ email: identity.email, name: identity.name });
 
+// Each member only receives their own notifications; the rest of the snapshot is shared.
+const ownNotifications = (notifications, userId) => notifications.filter((n) => n.userId === userId);
+
 export async function getWorkspace(identity) {
   const account = await resolveAccount(identity);
   if (account.status !== "member") return { ...account, account: accountSummary(identity) };
-  const data = await loadSnapshot(account.orgId);
+  const snapshot = await loadSnapshot(account.orgId);
+  const data = { ...snapshot, notifications: ownNotifications(snapshot.notifications, account.userId) };
   return { status: "member", account: accountSummary(identity), currentUserId: account.userId, data };
 }
 
@@ -175,7 +179,8 @@ export function runAction(identity, action) {
     const delivered = await deliverInviteEmail(identity, snapshot, account.userId, action, changes, result);
     await persistChanges(snapshot.org, changes);
     const emails = notificationEmails({ state, changes, action, actorId: account.userId, now, appUrl, timeZone: process.env.MACROKITE_TIME_ZONE });
-    return { result: delivered, changes, emails };
+    const put = changes.put.notifications ? { ...changes.put, notifications: ownNotifications(changes.put.notifications, account.userId) } : changes.put;
+    return { result: delivered, changes: { ...changes, put }, emails };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});

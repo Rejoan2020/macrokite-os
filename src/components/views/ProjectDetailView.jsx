@@ -270,7 +270,8 @@ function TasksTab({ project, tasks }) {
 // ----------------------------------------------------------------- chat tab
 
 function ChatTab({ project, conversation }) {
-  const { data } = useWorkspace();
+  const { data, activeUsers, currentUserId } = useWorkspace();
+  const people = activeUsers.filter((u) => u._id !== currentUserId && project.memberIds.includes(u._id));
   const messages = conversationMessages(data, conversation._id);
   const send = useSendMessage(conversation._id);
   const createTask = useTaskFromMessage(project._id);
@@ -289,7 +290,7 @@ function ChatTab({ project, conversation }) {
       ) : (
         <p className="text-muted">No messages yet. Everything said here stays with {project.name}.</p>
       )}
-      <Composer compact label={`Message ${project.name}`} placeholder={`Message # ${project.name}`} onSend={send} />
+      <Composer compact label={`Message ${project.name}`} placeholder={`Message # ${project.name}`} onSend={send} people={people} />
     </section>
   );
 }
