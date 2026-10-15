@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useId, useState } from "react";
-import { ChevronRight, Menu, RefreshCw, X } from "lucide-react";
-import { usePersistentState } from "@/lib/client/usePersistentState";
+import { Fragment, useEffect, useState } from "react";
+import { Menu, RefreshCw, X } from "lucide-react";
 import { TEAM_CHANNEL } from "@/lib/constants";
 import { useBackgroundRefresh, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { OverlayProvider } from "@/components/providers/OverlayProvider";
@@ -37,23 +36,18 @@ function useTitleCount(count) {
   }, [count]);
 }
 
-// An item with `children` is a collapsible group. It remembers whether it is open.
 const NAV = [
   [
     { href: "/", label: "Overview" },
     { href: "/meetings", label: "Meetings" },
+  ],
+  [
+    { href: "/projects", label: "Projects", badge: "projects" },
     { href: "/tasks", label: "My tasks", count: "tasks" },
   ],
   [
-    {
-      key: "channels",
-      label: "Channels",
-      children: [
-        { href: "/projects", label: "Projects", badge: "projects" },
-        { href: "/general", label: TEAM_CHANNEL, badge: "general" },
-      ],
-    },
-    { href: "/messages", label: "Messages", badge: "messages" },
+    { href: "/general", label: TEAM_CHANNEL, badge: "general" },
+    { href: "/messages", label: "Inbox", badge: "messages" },
   ],
   [
     { href: "/team", label: "Team" },
@@ -192,15 +186,14 @@ function useNavCounts() {
 
 const isActive = (href, pathname) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
-function NavLink({ item, pathname, counts, nested }) {
+function NavLink({ item, pathname, counts }) {
   const active = isActive(item.href, pathname);
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "flex items-center justify-between gap-2 rounded-lg py-2.5 pr-3 transition-colors",
-        nested ? "pl-7" : "pl-3",
+        "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-colors",
         active ? "bg-hover text-strong" : "text-secondary hover:bg-hover/60 hover:text-fg"
       )}
     >
@@ -212,41 +205,6 @@ function NavLink({ item, pathname, counts, nested }) {
         </span>
       )}
     </Link>
-  );
-}
-
-/** A collapsible menu group. Closed, it shows its pages' total unread count, and is highlighted when one of them is open. */
-function NavGroup({ group, pathname, counts }) {
-  const [open, setOpen] = usePersistentState(`nav-${group.key}-open`, true);
-  const listId = useId();
-  const hasActive = group.children.some((child) => isActive(child.href, pathname));
-  const unread = group.children.reduce((sum, child) => sum + (child.badge ? counts[child.badge] ?? 0 : 0), 0);
-  return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-controls={listId}
-        className={cx(
-          "flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left transition-colors",
-          !open && hasActive ? "bg-hover text-strong" : "text-secondary hover:bg-hover/60 hover:text-fg"
-        )}
-      >
-        <span className="flex items-center gap-1.5">
-          <ChevronRight aria-hidden className={cx("-ml-1 size-3.5 text-faint transition-transform", open && "rotate-90")} />
-          {group.label}
-        </span>
-        {!open && <CountBadge count={unread} label={`${unread} unread`} />}
-      </button>
-      {open && (
-        <div id={listId} className="flex flex-col gap-1">
-          {group.children.map((child) => (
-            <NavLink key={child.href} item={child} pathname={pathname} counts={counts} nested />
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -272,7 +230,7 @@ function Sidebar() {
           <Fragment key={i}>
             {i > 0 && <div className="mx-1 my-2.5 h-px bg-divider" />}
             {group.map((item) =>
-              item.children ? <NavGroup key={item.key} group={item} pathname={pathname} counts={counts} /> : <NavLink key={item.href} item={item} pathname={pathname} counts={counts} />
+              <NavLink key={item.href} item={item} pathname={pathname} counts={counts} />
             )}
           </Fragment>
         ))}

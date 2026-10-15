@@ -141,7 +141,7 @@ export function OverviewView() {
 const GROUPS = [
   { key: "projects", label: "Projects" },
   { key: "general", label: TEAM_CHANNEL },
-  { key: "messages", label: "Messages" },
+  { key: "messages", label: "Inbox" },
 ];
 
 function UnreadPanel({ groups, total, userId }) {

@@ -37,7 +37,7 @@ export function MessagesView() {
       <section aria-labelledby="dm-list" className={cx("w-full flex-col border-r border-divider lg:flex lg:w-80 lg:shrink-0", other ? "hidden" : "flex")}>
         <div className="flex items-center justify-between gap-2.5 px-[18px] pt-5 pb-3.5">
           <h1 id="dm-list" className="text-xl font-semibold tracking-[-0.01em] text-strong">
-            Messages
+            Inbox
           </h1>
           <button
             type="button"
