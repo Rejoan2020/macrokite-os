@@ -145,17 +145,18 @@ export async function createWorkspace(identity, input) {
  * saved invite records which WorkOS invitation it sent. Returns the action result, plus
  * emailSent/emailError for invites.
  */
-async function deliverInviteEmail(identity, snapshot, action, changes, result) {
+async function deliverInviteEmail(identity, snapshot, userId, action, changes, result) {
   if (action.type === "invite.cancel") {
     await revokeInviteEmail(snapshot.invites.find((i) => i._id === action.id));
     return result;
   }
   if (action.type !== "member.invite" && action.type !== "invite.resend") return result;
-  const { workosInvitationId, emailError } = await sendInviteEmail(result, identity.id);
-  if (emailError) return { ...result, emailSent: false, emailError };
+  const inviter = snapshot.users.find((u) => u._id === userId);
+  const { workosInvitationId, ...outcome } = await sendInviteEmail(result, { inviterAuthId: identity.id, inviterName: inviter?.name, orgName: snapshot.org.name });
+  if (!workosInvitationId) return { ...result, ...outcome };
   const invite = { ...result, workosInvitationId };
   changes.put.invites = changes.put.invites.map((doc) => (doc._id === invite._id ? invite : doc));
-  return { ...invite, emailSent: true };
+  return { ...invite, ...outcome };
 }
 
 // Mutations are serialized per server process so concurrent requests cannot interleave
@@ -168,7 +169,7 @@ export function runAction(identity, action) {
     if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
     const snapshot = await loadSnapshot(account.orgId);
     const { changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now: new Date(), newId });
-    const delivered = await deliverInviteEmail(identity, snapshot, action, changes, result);
+    const delivered = await deliverInviteEmail(identity, snapshot, account.userId, action, changes, result);
     await persistChanges(snapshot.org, changes);
     return { result: delivered, changes };
   };
