@@ -10,7 +10,8 @@ import { chatHeight } from "@/components/views/GeneralView";
 import { Avatar, Button, Checkbox, cx, EmptyNote, Page, Pill } from "@/components/ui/primitives";
 import { Select } from "@/components/ui/form";
 import { useAction } from "@/lib/client/useAction";
-import { FORMER_MEMBER, phaseLabel, TASK_STATUS_LABELS, TASK_STATUSES, taskPriority } from "@/lib/constants";
+import { FORMER_MEMBER, TASK_STATUS_LABELS, TASK_STATUSES, taskPriority } from "@/lib/constants";
+import { phaseName } from "@/lib/phases";
 import { PriorityLabel } from "@/components/tasks/TaskRow";
 import { formatDaysAgo, formatDue, formatShortDate, todayISO } from "@/lib/format";
 import { conversationMemberIds, isOverdue } from "@/lib/selectors";
@@ -179,7 +180,7 @@ function TaskDetails({ task }) {
           ) : (
             "—"
           )}
-          <span className="text-muted"> · {phaseLabel(task.phase)}</span>
+          <span className="text-muted"> · {phaseName(project, task.phase)}</span>
         </Detail>
         {meeting && (
           <Detail label="From meeting">
@@ -198,7 +199,7 @@ function TaskDetails({ task }) {
         </Button>
       ) : (
         <p className="text-[12px] text-faint">
-          {canSetStatus ? "You can update the status and comment. " : "You can comment. "}Only {creator && creator._id !== task.assigneeId ? creator.name : "the person who created it"} or an admin can edit this task.
+          {canSetStatus ? "You can update the status and comment. " : "You can comment. "}Only this project’s leads or an admin can edit this task.
         </p>
       )}
     </div>

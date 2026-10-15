@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { useOpenTask } from "@/components/tasks/taskHooks";
+import { useOpenTask, useTaskManagement } from "@/components/tasks/taskHooks";
 import { Button, Checkbox, cx, EmptyNote, IconButton, Page, Pill, SectionLabel } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
 import { firstName, formatDue, formatShortDate, formatWhen, joinNames, pluralize, todayISO } from "@/lib/format";
@@ -250,6 +250,7 @@ function Decisions({ meeting }) {
 function ActionItems({ meeting, project }) {
   const { data, lookup, activeUsers } = useWorkspace();
   const openTask = useOpenTask();
+  const { canManage } = useTaskManagement();
   const { run } = useAction();
   const [draft, setDraft] = useState(null); // { raw, title, assigneeId, dueDate, problems }
   const items = actionItems(meeting, data.tasks);
@@ -305,7 +306,8 @@ function ActionItems({ meeting, project }) {
 
         {draft && <DraftPrompt key={Object.keys(draft.problems).join()} draft={draft} candidates={candidates} onResolve={resolve} onCancel={() => setDraft(null)} />}
 
-        {!draft && <AddLine label="New action item" placeholder="Task @name day, e.g. Update API docs @Tanvir mon" onAdd={add} />}
+        {!draft && canManage(project) && <AddLine label="New action item" placeholder="Task @name day, e.g. Update API docs @Tanvir mon" onAdd={add} />}
+        {!canManage(project) && !items.length && <p className="py-2.5 text-[13px] text-muted">No action items yet. This project’s leads and admins add them.</p>}
       </div>
     </section>
   );

@@ -1,17 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { useOverlays } from "@/components/providers/OverlayProvider";
 import { TaskRow } from "@/components/tasks/TaskRow";
+import { useTaskManagement } from "@/components/tasks/taskHooks";
+import { canCreateProject } from "@/lib/permissions";
 import { conversationMessages } from "@/components/chat/Chat";
-import { CountBadge, cx, OnHoldPill, Page, PageHeader, Panel, PhaseBar, Summary, TextLink } from "@/components/ui/primitives";
+import { Button, CountBadge, cx, OnHoldPill, Page, PageHeader, Panel, PhaseBar, Summary, TextLink } from "@/components/ui/primitives";
 import { usePersistentState } from "@/lib/client/usePersistentState";
-import { FORMER_MEMBER, phaseIndex, phaseLabel, TEAM_CHANNEL } from "@/lib/constants";
+import { FORMER_MEMBER, TEAM_CHANNEL } from "@/lib/constants";
+import { phaseName, phaseStep } from "@/lib/phases";
 import { firstName, formatLongDate, formatShortDate, formatTime, greeting, pluralize, todayISO } from "@/lib/format";
 import { decisionLog, isOpenTask, isOverdue, isPastDeadline, sortByDue, stillOpenFromLast } from "@/lib/selectors";
 
+/** Shown inside a panel that has nothing yet, so every section stays visible and explains itself. */
+function PanelEmpty({ children, action }) {
+  return (
+    <div className="flex flex-1 flex-col items-start justify-center gap-3 px-[18px] py-6">
+      <p className="text-[13px] text-muted">{children}</p>
+      {action}
+    </div>
+  );
+}
+
 export function OverviewView() {
   const { data, currentUser, currentUserId, unread, chats, lookup } = useWorkspace();
+  const overlays = useOverlays();
+  const { canCreate } = useTaskManagement();
   const today = todayISO();
 
   const myOpen = sortByDue(data.tasks.filter((t) => t.assigneeId === currentUserId && isOpenTask(t)));
@@ -60,19 +77,39 @@ export function OverviewView() {
       />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] gap-4">
-        {myOpen.length > 0 && (
-          <Panel id="o-tasks" title="My tasks" action={<TextLink href="/tasks">All {myOpen.length}</TextLink>}>
-            {myOpen.slice(0, 3).map((task) => (
-              <TaskRow key={task._id} task={task} who="assigner" />
-            ))}
-          </Panel>
-        )}
+        <Panel id="o-tasks" title="My tasks" action={<TextLink href="/tasks">{myOpen.length ? `All ${myOpen.length}` : "Open"}</TextLink>}>
+          {myOpen.length ? (
+            myOpen.slice(0, 3).map((task) => <TaskRow key={task._id} task={task} who="assigner" />)
+          ) : (
+            <PanelEmpty
+              action={
+                canCreate && (
+                  <Button size="sm" icon={Plus} onClick={() => overlays.newTask()}>
+                    Add task
+                  </Button>
+                )
+              }
+            >
+              Nothing assigned to you right now. Tasks assigned to you show up here, most urgent first.
+            </PanelEmpty>
+          )}
+        </Panel>
 
-        {unreadTotal > 0 && <UnreadPanel groups={unreadGroups} total={unreadTotal} userId={currentUserId} />}
+        <UnreadPanel groups={unreadGroups} total={unreadTotal} userId={currentUserId} />
 
-        {meetingsToday.length > 0 && (
-          <Panel id="o-meet" title="Meetings today" action={<TextLink href="/meetings">This week</TextLink>}>
-            {meetingsToday.slice(0, 5).map((m, i) => {
+        <Panel id="o-meet" title="Meetings today" action={<TextLink href="/meetings">This week</TextLink>}>
+          {meetingsToday.length === 0 && (
+            <PanelEmpty
+              action={
+                <Button size="sm" icon={Plus} onClick={() => overlays.newMeeting()}>
+                  Schedule a meeting
+                </Button>
+              }
+            >
+              No meetings today.
+            </PanelEmpty>
+          )}
+          {meetingsToday.slice(0, 5).map((m, i) => {
               const open = stillOpenFromLast(m, data).length;
               const next = meetingsToday.find((x) => !x.endedAt);
               const detail = [m.agenda.length ? pluralize(m.agenda.length, "agenda topic") : "No agenda yet", open && `${pluralize(open, "open item")} from last time`, m.endedAt && "ended"];
@@ -86,12 +123,11 @@ export function OverviewView() {
                 </Link>
               );
             })}
-          </Panel>
-        )}
+        </Panel>
 
-        {decisions.length > 0 && (
-          <Panel id="o-dec" title="Recent decisions">
-            {decisions.map((d, i) => (
+        <Panel id="o-dec" title="Recent decisions" action={<TextLink href="/meetings">Meetings</TextLink>}>
+          {decisions.length === 0 && <PanelEmpty>No decisions yet. Decisions recorded in your projects’ meetings show up here.</PanelEmpty>}
+          {decisions.map((d, i) => (
               <Link key={d._id} href={`/meetings/${d.meeting._id}`} className={cx("flex gap-3 px-[18px] py-3 hover:bg-hover/50", i < decisions.length - 1 && "border-b border-row")}>
                 <span aria-hidden className="text-accent">
                   ✓
@@ -104,13 +140,24 @@ export function OverviewView() {
                 </span>
               </Link>
             ))}
-          </Panel>
-        )}
+        </Panel>
       </div>
 
-      {myProjects.length > 0 && (
-        <Panel id="o-proj" title="My projects" action={<TextLink href="/projects">All projects</TextLink>}>
-          {myProjects.slice(0, 5).map((p) => {
+      <Panel id="o-proj" title="My projects" action={<TextLink href="/projects">All projects</TextLink>}>
+        {myProjects.length === 0 && (
+          <PanelEmpty
+            action={
+              canCreateProject(currentUser) && (
+                <Button size="sm" icon={Plus} onClick={() => overlays.newProject()}>
+                  New project
+                </Button>
+              )
+            }
+          >
+            You’re not on any projects yet. Projects you’re a member of show up here with their phase and deadline.
+          </PanelEmpty>
+        )}
+        {myProjects.slice(0, 5).map((p) => {
             const late = isPastDeadline(p, today);
             return (
               <Link
@@ -124,16 +171,15 @@ export function OverviewView() {
                 </span>
                 <span className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1.5 sm:col-span-1 sm:row-start-auto">
                   <span className="text-xs text-secondary">
-                    {phaseLabel(p.phase)} · <span className="font-mono">{phaseIndex(p.phase) + 1}/7</span>
+                    {phaseName(p, p.phase)} · <span className="font-mono">{phaseStep(p).index + 1}/{phaseStep(p).count}</span>
                   </span>
-                  <PhaseBar phase={p.phase} onHold={p.onHold} />
+                  <PhaseBar project={p} />
                 </span>
                 <span className={cx("justify-self-end text-[13px]", late ? "font-medium text-danger" : "text-secondary")}>{p.deadline ? formatShortDate(p.deadline) : "—"}</span>
               </Link>
             );
           })}
-        </Panel>
-      )}
+      </Panel>
     </Page>
   );
 }
@@ -148,8 +194,9 @@ function UnreadPanel({ groups, total, userId }) {
   const [collapsed, setCollapsed] = usePersistentState(`overview-unread:${userId}`, {});
   const shown = GROUPS.filter((g) => groups[g.key].length);
   return (
-    <Panel id="o-unread" title="Unread" action={<span className="text-[13px] text-muted">{pluralize(total, "message")}</span>}>
-      <div className="pb-1.5">
+    <Panel id="o-unread" title="Unread" action={total > 0 && <span className="text-[13px] text-muted">{pluralize(total, "message")}</span>}>
+      {total === 0 && <PanelEmpty>You’re all caught up. Unread messages from your projects, {TEAM_CHANNEL} and direct messages show up here.</PanelEmpty>}
+      <div className={cx(total > 0 && "pb-1.5")}>
         {shown.map((group, i) => {
           const open = !collapsed[group.key];
           const items = groups[group.key];

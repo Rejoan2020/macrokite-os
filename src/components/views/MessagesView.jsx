@@ -134,14 +134,14 @@ function Conversation({ other }) {
                 <LinkCards body={m.body} />
                 <span className="flex items-center gap-2 font-mono text-[11px] text-faint">
                   {formatTime(m.createdAt)}
-                  {!mine && m !== lastIncoming && (
+                  {createTask && !mine && m !== lastIncoming && (
                     <button type="button" onClick={() => createTask(m)} className="reveal flex items-center gap-1 font-sans text-muted hover:text-fg">
                       <ListPlus className="size-3" aria-hidden /> Create task
                     </button>
                   )}
                 </span>
               </div>
-              {m === lastIncoming && (
+              {createTask && m === lastIncoming && (
                 <button
                   type="button"
                   onClick={() => createTask(m)}
