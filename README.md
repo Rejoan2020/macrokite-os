@@ -8,7 +8,7 @@ A minimal internal hub for the Macrokite team: project work, meetings and decisi
 
 The design spec and screen references live in [`macrokite-os-design/`](macrokite-os-design/DESIGN.md).
 
-> **Status: MVP with sign-in.** Database mode requires signing in (WorkOS: Google or email + password), and each account only sees its own workspace. Rate limiting, security headers and email delivery are still to do before a public launch.
+> **Status: MVP with sign-in.** Database mode requires signing in (WorkOS: Google or email + password), and each account only sees its own workspace. Invite emails are sent by WorkOS; other email (notifications, meeting summaries), rate limiting and security headers are still to do before a public launch.
 
 ## Quick start
 
@@ -26,7 +26,7 @@ With no configuration the app starts in **demo mode**: a sample workspace is see
 1. **MongoDB.** Use a local server or a MongoDB Atlas cluster.
 2. **WorkOS.** Create a free account at [dashboard.workos.com](https://dashboard.workos.com), then:
    - Under **Authentication**, turn on **Google OAuth** and **Email + Password**.
-   - Under **Redirects**, add the redirect URI `http://localhost:3000/auth/callback`, set the sign-in endpoint (initiate login URI) to `http://localhost:3000/auth/sign-in`, and set the sign-out redirect to `http://localhost:3000/`.
+   - Under **Redirects**, add the redirect URI `http://localhost:3000/auth/callback`, set the sign-in endpoint (initiate login URI) and the **User invitation URL** to `http://localhost:3000/auth/sign-in`, and set the sign-out redirect to `http://localhost:3000/`. In production use your app URL instead; each of these takes one URL, so point them at production.
    - Copy the client ID and API key.
 3. **Configure** `.env.local`:
 
@@ -42,7 +42,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-4. **Sign in** with the email listed in `MACROKITE_WORKSPACE_CREATORS` and create your workspace; you become its admin. Invite teammates from **Team**. They join the first time they sign in with the invited email (invite emails aren't sent yet, so send them the link).
+4. **Sign in** with the email listed in `MACROKITE_WORKSPACE_CREATORS` and create your workspace; you become its admin. Invite teammates from **Team**. WorkOS emails them a link, and they join the first time they sign up or sign in with the invited email.
 
 How accounts map to workspaces:
 
@@ -125,7 +125,7 @@ Write requests must send `Content-Type: application/json` and may not come from 
 
 ## Known limitations
 
-- **Invites don't send email.** An invite is accepted when that email signs in; share the app link yourself.
+- **Only invites send email**, through WorkOS and its email template. If WorkOS can't send one, the invite is still saved, the admin sees a warning, and that person still joins by signing in with the invited email.
 - **One workspace at a time.** Someone in several workspaces opens the oldest one; there is no workspace switcher yet.
 - **Notifications are in-app records only.** Email preferences are saved but no email is sent, including the end-of-meeting summary.
 - Database mode loads the organization's snapshot per request and serializes writes per server process. This is fine for a small team, not for large datasets or several server instances.

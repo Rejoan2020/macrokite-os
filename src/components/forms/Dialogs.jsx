@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
-import { useAction } from "@/lib/client/useAction";
+import { announceInvite, useAction } from "@/lib/client/useAction";
+import { useToast } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui/primitives";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { Field, Input, PeoplePicker, Select } from "@/components/ui/form";
@@ -300,10 +301,14 @@ export function InviteDialog({ open, onClose }) {
 
 function InviteForm({ onClose }) {
   const { run, busy, fieldErrors } = useAction();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const submit = async (e) => {
     e.preventDefault();
-    if (await run({ type: "member.invite", data: { email } }, { success: "Invite added", successDescription: `${email} joins when they sign in` })) onClose();
+    const invite = await run({ type: "member.invite", data: { email } });
+    if (!invite) return;
+    announceInvite(toast, invite, "Invite sent");
+    onClose();
   };
   return (
     <Dialog
@@ -311,8 +316,8 @@ function InviteForm({ onClose }) {
       onClose={onClose}
       size="sm"
       title="Invite member"
-      description="They join as a member the first time they sign in with this email. Send them the app link yourself; invite emails aren’t sent yet."
-      footer={<FormFooter formId="invite-form" busy={busy} label="Add invite" onClose={onClose} />}
+      description="We email them an invite link. They join as a member the first time they sign up or sign in with this email."
+      footer={<FormFooter formId="invite-form" busy={busy} label="Send invite" onClose={onClose} />}
     >
       <form id="invite-form" onSubmit={submit} noValidate>
         <Field label="Email" error={fieldErrors.email}>

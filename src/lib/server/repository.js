@@ -4,6 +4,7 @@ import { applyAction, DomainError } from "../engine";
 import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember } from "../membership";
 import { SCHEMA_VERSION } from "../seed";
 import { connectToDatabase } from "./db";
+import { revokeInviteEmail, sendInviteEmail } from "./invitations";
 import { COLLECTION_MODELS, Conversation, Invite, Organization, Project, User } from "./models";
 
 /**
@@ -139,6 +140,24 @@ export async function createWorkspace(identity, input) {
   return { _id: built.org._id, name: built.org.name };
 }
 
+/**
+ * Emails for invite actions, after the engine has validated them and before they are saved, so the
+ * saved invite records which WorkOS invitation it sent. Returns the action result, plus
+ * emailSent/emailError for invites.
+ */
+async function deliverInviteEmail(identity, snapshot, action, changes, result) {
+  if (action.type === "invite.cancel") {
+    await revokeInviteEmail(snapshot.invites.find((i) => i._id === action.id));
+    return result;
+  }
+  if (action.type !== "member.invite" && action.type !== "invite.resend") return result;
+  const { workosInvitationId, emailError } = await sendInviteEmail(result, identity.id);
+  if (emailError) return { ...result, emailSent: false, emailError };
+  const invite = { ...result, workosInvitationId };
+  changes.put.invites = changes.put.invites.map((doc) => (doc._id === invite._id ? invite : doc));
+  return { ...invite, emailSent: true };
+}
+
 // Mutations are serialized per server process so concurrent requests cannot interleave
 // their read-modify-write cycles.
 let queue = Promise.resolve();
@@ -149,8 +168,9 @@ export function runAction(identity, action) {
     if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
     const snapshot = await loadSnapshot(account.orgId);
     const { changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now: new Date(), newId });
+    const delivered = await deliverInviteEmail(identity, snapshot, action, changes, result);
     await persistChanges(snapshot.org, changes);
-    return { result, changes };
+    return { result: delivered, changes };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});
