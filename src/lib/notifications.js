@@ -1,4 +1,4 @@
-import { FORMER_MEMBER } from "./constants";
+import { FORMER_MEMBER, TEAM_CHANNEL } from "./constants";
 
 /**
  * What a notification says and where it leads, from the current snapshot. Pure, shared by the
@@ -17,7 +17,7 @@ export function describeNotification(n, data) {
     const detail = message.deletedAt ? "Message deleted" : message.body;
     if (n.type === "dm") return { actorId, text: `${userName(actorId)} sent you a message`, detail, href: `/messages/${actorId}` };
     const project = conversation.type === "project" ? byId("projects", conversation.projectId) : null;
-    const place = conversation.type === "general" ? "# General" : project ? `# ${project.name}` : "a message";
+    const place = conversation.type === "general" ? TEAM_CHANNEL : project ? `# ${project.name}` : "a message";
     const href = conversation.type === "general" ? "/general" : project ? `/projects/${project._id}?tab=chat` : `/messages/${actorId}`;
     return { actorId, text: `${userName(actorId)} mentioned you in ${place}`, detail, href };
   }

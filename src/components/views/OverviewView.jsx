@@ -6,7 +6,7 @@ import { TaskRow } from "@/components/tasks/TaskRow";
 import { conversationMessages } from "@/components/chat/Chat";
 import { CountBadge, cx, OnHoldPill, Page, PageHeader, Panel, PhaseBar, Summary, TextLink } from "@/components/ui/primitives";
 import { usePersistentState } from "@/lib/client/usePersistentState";
-import { FORMER_MEMBER, phaseIndex, phaseLabel } from "@/lib/constants";
+import { FORMER_MEMBER, phaseIndex, phaseLabel, TEAM_CHANNEL } from "@/lib/constants";
 import { firstName, formatLongDate, formatShortDate, formatTime, greeting, pluralize, todayISO } from "@/lib/format";
 import { decisionLog, isOpenTask, isOverdue, isPastDeadline, sortByDue, stillOpenFromLast } from "@/lib/selectors";
 
@@ -29,7 +29,7 @@ export function OverviewView() {
     projects: myProjects
       .map((p) => ({ key: p._id, href: `/projects/${p._id}?tab=chat`, label: `# ${p.name}`, ...unread[chats.projects[p._id]?._id] }))
       .filter((g) => g.count),
-    general: chats.general && unread[chats.general._id] ? [{ key: "general", href: "/general", label: "# General", ...unread[chats.general._id] }] : [],
+    general: chats.general && unread[chats.general._id] ? [{ key: "general", href: "/general", label: TEAM_CHANNEL, ...unread[chats.general._id] }] : [],
     messages: Object.entries(chats.dms)
       .filter(([, c]) => unread[c._id])
       .map(([userId, c]) => ({
@@ -140,7 +140,7 @@ export function OverviewView() {
 
 const GROUPS = [
   { key: "projects", label: "Projects" },
-  { key: "general", label: "General" },
+  { key: "general", label: TEAM_CHANNEL },
   { key: "messages", label: "Messages" },
 ];
 

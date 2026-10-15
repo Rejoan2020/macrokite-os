@@ -1,4 +1,5 @@
 import { applyAction, applyChanges, DomainError } from "../engine";
+import { renamedCompanyProject } from "../membership";
 import { buildSeed, SCHEMA_VERSION, SEED_OWNER_ID } from "../seed";
 
 // Browser-side storage adapters. Both expose the same interface so the UI never branches on mode:
@@ -36,7 +37,15 @@ function freshDemo() {
 export const demoAdapter = {
   mode: "demo",
   storageKey: DEMO_KEY,
-  load: () => readDemo() ?? freshDemo(),
+  load() {
+    const saved = readDemo();
+    if (!saved) return freshDemo();
+    const renamed = renamedCompanyProject(saved.data.projects, new Date());
+    if (!renamed) return saved;
+    const data = { ...saved.data, projects: saved.data.projects.map((p) => (p._id === renamed._id ? renamed : p)) };
+    writeDemo(data, saved.currentUserId);
+    return { ...saved, data };
+  },
   async dispatch(state, action, currentUserId) {
     const { state: next, result } = applyAction(state, action, { orgId: state.org._id, userId: currentUserId, now: new Date(), newId });
     if (!writeDemo(next, currentUserId)) {

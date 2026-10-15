@@ -2,7 +2,7 @@
 
 A minimal internal hub for the Macrokite team: project work, meetings and decisions, and team conversation in one place.
 
-- **The project is the hub.** Tasks, meetings, decisions, chat and notes all belong to a project. Company-wide work goes in the **Internal** project.
+- **The project is the hub.** Tasks, meetings, decisions, chat and notes all belong to a project. Company-wide work goes in the **Company** project (created with every workspace; it can be renamed but not archived). Team-wide chat is **Internal**.
 - **Phases are the spine.** Every project moves through seven fixed phases: Idea, Planning, Design, Build, Test, Launch, Maintain.
 - **Capture where it happens.** An action item typed in a meeting is a real task, and a decision typed in a meeting lands in the project's decision log.
 
@@ -80,7 +80,7 @@ Database mode no longer seeds sample data. A database created by an earlier vers
 
 | Route | What's there |
 | --- | --- |
-| `/` | Overview: my top tasks, unread (projects, General, messages), meetings today, recent decisions, my projects |
+| `/` | Overview: my top tasks, unread (projects, Internal, messages), meetings today, recent decisions, my projects |
 | `/projects` | Table or cards, search, phase filter tabs plus On hold and Archived |
 | `/projects/[id]?tab=` | Phase card with "Move to next phase", and tabs for Tasks, Chat, Meetings, Decisions and Notes. Put on hold, archive (no delete) |
 | `/meetings`, `/meetings/[id]` | Upcoming and past meetings. A meeting has agenda, notes, decisions and one-line action items (`Task @name fri`) |

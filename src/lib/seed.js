@@ -1,4 +1,4 @@
-import { DEFAULT_NOTIFICATION_PREFS } from "./constants";
+import { COMPANY_PROJECT, DEFAULT_NOTIFICATION_PREFS } from "./constants";
 import { addDaysISO, todayISO } from "./format";
 import { readStateId } from "./selectors";
 
@@ -55,7 +55,7 @@ export function buildSeed(now = new Date()) {
     project("prj_site", "Macrokite Website", "Our studio site: services, case studies and contact flow.", "build", 29, [S, N]),
     project("prj_billing", "Subscription Billing Flow", "Pause and skip, a billing portal and payment reminder emails.", "planning", 44, [A, T]),
     project("prj_migration", "Website Migration", "Content moved and redirects live; now monitoring.", "maintain", null, [A, S]),
-    project("prj_internal", "Internal", "Company-wide work: hiring, operations, tooling and team rituals.", "maintain", null, everyone, {
+    project("prj_internal", COMPANY_PROJECT, "Company-wide work: hiring, operations, tooling and team rituals.", "maintain", null, everyone, {
       isInternal: true,
       notes: "Team handbook: https://macrokite.notion.site/handbook\nFridays are no-meeting days.",
     }),
@@ -86,7 +86,7 @@ export function buildSeed(now = new Date()) {
       agenda: [topic("agd_5", "Tooling", true), topic("agd_6", "Launch reviews", true)],
       decisions: [
         decision("dec_2", "Fridays are no-meeting days", on(-2, 11, 20)),
-        decision("dec_3", "Company-wide work goes in the Internal project", on(-2, 11, 30)),
+        decision("dec_3", `Company-wide work goes in the ${COMPANY_PROJECT} project`, on(-2, 11, 30)),
       ],
       endedAt: on(-2, 11, 50),
     }),

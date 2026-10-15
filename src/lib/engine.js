@@ -192,7 +192,7 @@ const handlers = {
   },
   "project.archive"(tx, ctx, { id, data }) {
     const current = tx.find("projects", id, "Project");
-    if (current.isInternal) throw new DomainError("The Internal project can’t be archived.");
+    if (current.isInternal) throw new DomainError("The company-wide project can’t be archived.");
     return tx.put("projects", { ...current, archived: Boolean(data?.archived), updatedAt: tx.now });
   },
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes, randomUUID } from "node:crypto";
 import { applyAction, DomainError } from "../engine";
-import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember } from "../membership";
+import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember, renamedCompanyProject } from "../membership";
 import { SCHEMA_VERSION } from "../seed";
 import { notificationEmails } from "../emails";
 import { connectToDatabase } from "./db";
@@ -94,6 +94,12 @@ async function loadSnapshot(orgId) {
   const entries = Object.entries(COLLECTION_MODELS);
   const results = await Promise.all(entries.map(([, Model]) => Model.find({ orgId: org._id }).lean()));
   entries.forEach(([name], i) => (snapshot[name] = results[i]));
+  const renamed = renamedCompanyProject(snapshot.projects, new Date());
+  if (renamed) {
+    // Matching on the old name keeps this a one-time rename even with concurrent requests.
+    await Project.updateOne({ _id: renamed._id, orgId: org._id, name: "Internal" }, { $set: { name: renamed.name, updatedAt: renamed.updatedAt } });
+    snapshot.projects = snapshot.projects.map((p) => (p._id === renamed._id ? renamed : p));
+  }
   return snapshot;
 }
 

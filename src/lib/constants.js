@@ -28,6 +28,12 @@ export const NOTIFICATION_PREFS = [
 ];
 export const DEFAULT_NOTIFICATION_PREFS = { assignment: true, meetingInvite: true };
 
+// The team-wide chat (conversation type "general", at /general). Shown without a "#", unlike project chats.
+export const TEAM_CHANNEL = "Internal";
+
+// The project every workspace starts with, for company-wide work (isInternal: true).
+export const COMPANY_PROJECT = "Company";
+
 // Shown wherever a deleted member appears in history.
 export const FORMER_MEMBER = "Former member";
 

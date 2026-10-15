@@ -1,4 +1,4 @@
-import { DEFAULT_NOTIFICATION_PREFS } from "./constants";
+import { COMPANY_PROJECT, DEFAULT_NOTIFICATION_PREFS } from "./constants";
 import { workspaceInput } from "./schemas";
 import { SCHEMA_VERSION } from "./seed";
 
@@ -86,6 +86,15 @@ export function rejoinedMember(deleted, { identity, now, newId }) {
   return { ...deleted, ...fresh, deletedAt: null };
 }
 
+/**
+ * Workspaces created before the team chat was named "Internal" have a company-wide project with
+ * that name too. Returns that project renamed to COMPANY_PROJECT, or null when there is nothing to do.
+ */
+export function renamedCompanyProject(projects, now) {
+  const legacy = projects.find((p) => p.isInternal && p.name === "Internal");
+  return legacy ? { ...legacy, name: COMPANY_PROJECT, updatedAt: now.toISOString() } : null;
+}
+
 export function slugify(name, suffix) {
   const base = String(name)
     .toLowerCase()
@@ -107,7 +116,7 @@ export function newWorkspace({ name: rawName, identity, now, newId, slugSuffix }
   const internal = {
     _id: newId("prj"),
     orgId,
-    name: "Internal",
+    name: COMPANY_PROJECT,
     description: "Company-wide work: hiring, operations, tooling and team rituals.",
     phase: "maintain",
     deadline: "",

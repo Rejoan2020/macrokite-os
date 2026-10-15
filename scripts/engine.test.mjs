@@ -5,7 +5,7 @@ import { buildSeed, SEED_ORG_ID, SEED_OWNER_ID } from "../src/lib/seed.js";
 import { groupMyTasks, stillOpenFromLast, unreadByConversation } from "../src/lib/selectors.js";
 import { addDaysISO, todayISO } from "../src/lib/format.js";
 import { mentionHandle, mentionSuggestions, parseActionItem, parseDay, parseMentions, socialLink, tokenize } from "../src/lib/text.js";
-import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember } from "../src/lib/membership.js";
+import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember, renamedCompanyProject } from "../src/lib/membership.js";
 import { notificationEmails } from "../src/lib/emails.js";
 import { myNotifications } from "../src/lib/notifications.js";
 
@@ -302,6 +302,16 @@ test("sign-in accounts map to members safely", () => {
   assert.equal(canCreateWorkspace(verified, " Sara@Acme.dev , boss@acme.dev"), true);
   assert.equal(canCreateWorkspace(verified, "*"), true);
   assert.equal(canCreateWorkspace({ ...verified, emailVerified: false }, "*"), false, "creating needs a verified email");
+});
+
+test("an older workspace's Internal project is renamed to Company once", () => {
+  const projects = [
+    { _id: "p1", name: "Internal", isInternal: true },
+    { _id: "p2", name: "Internal", isInternal: false },
+  ];
+  assert.deepEqual(renamedCompanyProject(projects, new Date()).name, "Company");
+  assert.equal(renamedCompanyProject([{ ...projects[0], name: "Company" }, projects[1]], new Date()), null, "already renamed, and other projects are never touched");
+  assert.equal(renamedCompanyProject([{ ...projects[0], name: "Ops" }], new Date()), null, "a custom name is kept");
 });
 
 test("a new workspace is usable by its creator", () => {

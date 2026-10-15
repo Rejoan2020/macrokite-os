@@ -3,6 +3,7 @@
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { ChannelMessage, Composer, conversationMessages, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
 import { pluralize } from "@/lib/format";
+import { TEAM_CHANNEL } from "@/lib/constants";
 
 /** Full-height chat layout shared by General and Messages. */
 export const chatHeight = "h-[calc(100dvh-3.5rem)] lg:h-dvh";
@@ -21,7 +22,7 @@ export function GeneralView() {
     <div className={`flex flex-col ${chatHeight}`}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-divider px-4 py-5 sm:px-8">
         <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold tracking-[-0.01em] text-strong"># General</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.01em] text-strong">{TEAM_CHANNEL}</h1>
           <p className="text-[13px] text-muted">Whole team · announcements, news, memes and posts</p>
         </div>
         <span className="text-[13px] text-muted">{pluralize(activeUsers.length, "member")}</span>
@@ -35,7 +36,7 @@ export function GeneralView() {
 
       <div className="border-t border-divider px-4 pt-4 pb-6 sm:px-8">
         <div className="mx-auto max-w-[760px]">
-          <Composer label="Message General" placeholder="Message # General" onSend={send} people={activeUsers.filter((u) => u._id !== currentUserId)} hint="Paste a Facebook or Instagram link to share a post · @ to mention someone" />
+          <Composer label={`Message ${TEAM_CHANNEL}`} placeholder={`Message ${TEAM_CHANNEL}`} onSend={send} people={activeUsers.filter((u) => u._id !== currentUserId)} hint="Paste a Facebook or Instagram link to share a post · @ to mention someone" />
         </div>
       </div>
     </div>
