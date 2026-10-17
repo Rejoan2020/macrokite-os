@@ -1,5 +1,6 @@
 import { applyAction, applyChanges, DomainError } from "../engine";
 import { renamedCompanyProject } from "../membership";
+import { normalizeSnapshot } from "../compat";
 import { buildSeed, SCHEMA_VERSION, SEED_OWNER_ID } from "../seed";
 
 // Browser-side storage adapters. Both expose the same interface so the UI never branches on mode:
@@ -13,7 +14,7 @@ function readDemo() {
   try {
     const raw = window.localStorage.getItem(DEMO_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
-    return parsed?.data?.org?.schemaVersion === SCHEMA_VERSION && parsed.currentUserId ? parsed : null;
+    return parsed?.data?.org?.schemaVersion === SCHEMA_VERSION && parsed.currentUserId ? { ...parsed, data: normalizeSnapshot(parsed.data) } : null;
   } catch {
     return null;
   }

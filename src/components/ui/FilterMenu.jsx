@@ -65,13 +65,13 @@ export function FilterMenu({ label, value, onChange, options, allLabel }) {
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         className={cx(
-          "flex h-11 items-center gap-2 rounded-lg border bg-card pr-2.5 pl-3 transition-colors hover:border-dash",
-          open ? "border-accent/60" : value ? "border-accent/40" : "border-line"
+          "flex h-11 items-center gap-2 rounded-full border bg-card pr-3.5 pl-4 transition-colors hover:border-dash",
+          open ? "border-accent/60" : value ? "border-accent/40" : "border-card-line"
         )}
       >
         <span className="text-muted">{label}</span>
         {selected.dot && <span aria-hidden className={cx("size-2 rounded-full", selected.dot)} />}
-        <span className={cx("max-w-48 truncate font-medium", value ? "text-accent-light" : "text-fg")}>{selected.label}</span>
+        <span className={cx("max-w-48 truncate font-medium", value ? "text-accent-light" : "text-strong")}>{selected.label}</span>
         <ChevronDown aria-hidden className={cx("size-4 text-muted transition-transform", open && "rotate-180")} />
       </button>
 
@@ -84,7 +84,7 @@ export function FilterMenu({ label, value, onChange, options, allLabel }) {
           aria-label={label}
           aria-activedescendant={`${listId}-${active}`}
           onKeyDown={onKeyDown}
-          className="absolute top-full right-0 z-30 mt-1.5 max-h-80 w-64 overflow-y-auto rounded-xl border border-line bg-card py-1.5 shadow-lg outline-none sm:right-auto sm:left-0"
+          className="absolute top-full right-0 z-30 mt-1.5 max-h-80 w-64 overflow-y-auto rounded-2xl border border-line bg-card py-1.5 shadow-pop outline-none"
         >
           {items.map((option, i) => {
             const isSelected = option.value === selected.value;
@@ -97,7 +97,7 @@ export function FilterMenu({ label, value, onChange, options, allLabel }) {
                 onClick={() => pick(option)}
                 onMouseEnter={() => setActive(i)}
                 className={cx(
-                  "mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px]",
+                  "mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px]",
                   i === active && "bg-hover",
                   isSelected ? "text-strong" : "text-secondary",
                   i === 0 && items.length > 1 && "mb-1"

@@ -18,7 +18,7 @@ export function SignOutButton({ className, compact }) {
       disabled={pending}
       aria-label={compact ? "Sign out" : undefined}
       title="Sign out"
-      className={cx("flex items-center gap-2 rounded-lg text-[13px] text-muted hover:text-fg disabled:opacity-60", className)}
+      className={cx("flex items-center gap-2 rounded-full text-[13px] text-muted hover:text-fg disabled:opacity-60", className)}
     >
       <LogOut className="size-4" aria-hidden />
       {!compact && (pending ? "Signing out…" : "Sign out")}
@@ -31,7 +31,7 @@ export function OnboardingScreen() {
   const { account, onboarding, reload } = useWorkspace();
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
-      <div className="flex w-full max-w-md flex-col gap-5 rounded-xl border border-line bg-card p-6">
+      <div className="flex w-full max-w-md flex-col gap-5 rounded-[22px] border border-card-line bg-card p-7">
         <Logo />
         {onboarding.removed ? (
           <Message title="You no longer have access">An admin removed you from your workspace. Ask them to restore your access, then check again.</Message>

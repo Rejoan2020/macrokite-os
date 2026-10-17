@@ -3,17 +3,19 @@
 import { useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Avatar, Button, Card, Checkbox, Page, Pill } from "@/components/ui/primitives";
+import { Avatar, Button, Card, Page, PageHeader, Pill, Switch, TabGroup } from "@/components/ui/primitives";
+import { SignOutButton } from "@/components/shell/AccountScreens";
+import { useTheme } from "@/lib/client/theme";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/form";
 import { useAction } from "@/lib/client/useAction";
-import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_PREFS, PHASES, phaseLabel } from "@/lib/constants";
+import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_PREFS } from "@/lib/constants";
 
 function SectionHead({ id, title, hint, children }) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <div className="flex flex-col gap-1">
-        <h2 id={id} className="text-base font-semibold">
+        <h2 id={id} className="text-lg font-medium text-strong">
           {title}
         </h2>
         {hint && <p className="text-[13px] text-muted">{hint}</p>}
@@ -55,10 +57,10 @@ export function SettingsView() {
 
   return (
     <Page width="sm">
-      <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.02em] text-strong">Settings</h1>
+      <PageHeader title="Settings" actions={mode === "database" && <SignOutButton className="h-11 rounded-full border border-line px-5 hover:bg-hover" />} />
 
       <form onSubmit={save} className="flex flex-col gap-6" noValidate>
-        <Card as="section" aria-labelledby="s-profile" className="flex flex-col gap-[18px] p-[22px]">
+        <Card as="section" aria-labelledby="s-profile" className="flex flex-col gap-5 p-6">
           <SectionHead id="s-profile" title="Profile" hint="How you appear to the team" />
           <div className="flex flex-wrap items-center gap-3.5">
             <Avatar user={{ ...currentUser, avatarUrl: values.avatarUrl }} size="lg" />
@@ -77,7 +79,7 @@ export function SettingsView() {
                 )}
               </Field>
             ) : (
-              <Button variant="outline" size="sm" className="h-10" onClick={() => setEditingPhoto(true)}>
+              <Button variant="outline" size="sm" className="h-11 px-5" onClick={() => setEditingPhoto(true)}>
                 Change photo
               </Button>
             )}
@@ -92,41 +94,33 @@ export function SettingsView() {
           </div>
         </Card>
 
-        <Card as="section" aria-labelledby="s-notify" className="flex flex-col gap-3.5 p-[22px]">
+        <Appearance />
+
+        <Card as="section" aria-labelledby="s-notify" className="flex flex-col gap-3.5 p-6">
           <SectionHead id="s-notify" title="Email notifications" hint="In-app notifications are always on" />
           {NOTIFICATION_PREFS.map((pref) => (
-            <label key={pref.key} className="flex min-h-11 cursor-pointer items-center justify-between gap-4 border-t border-row pt-3">
+            <div key={pref.key} className="flex min-h-11 items-center justify-between gap-4 border-t border-row pt-3.5">
               <span className="flex flex-col gap-0.5">
-                <span>{pref.label}</span>
+                <span className="font-medium text-strong">{pref.label}</span>
                 <span className="text-xs text-muted">{pref.hint}</span>
               </span>
-              <Checkbox
+              <Switch
+                label={pref.label}
                 checked={values.notificationPrefs[pref.key]}
-                onChange={(e) => setValues((v) => ({ ...v, notificationPrefs: { ...v.notificationPrefs, [pref.key]: e.target.checked } }))}
+                onChange={(checked) => setValues((v) => ({ ...v, notificationPrefs: { ...v.notificationPrefs, [pref.key]: checked } }))}
               />
-            </label>
+            </div>
           ))}
         </Card>
 
         {isAdmin && (
-          <Card as="section" aria-labelledby="s-workspace" className="flex flex-col gap-4 p-[22px]">
+          <Card as="section" aria-labelledby="s-workspace" className="flex flex-col gap-4 p-6">
             <SectionHead id="s-workspace" title="Workspace">
               <Pill>Admins only</Pill>
             </SectionHead>
             <Field label="Workspace name" error={errors("workspace").name}>
               {(p) => <Input {...p} value={values.workspaceName} onChange={(e) => setValues((v) => ({ ...v, workspaceName: e.target.value }))} />}
             </Field>
-            <div className="flex flex-col gap-2">
-              <span className="text-[13px] text-secondary">Standard phases</span>
-              <div className="flex flex-wrap gap-1.5">
-                {PHASES.map((p) => (
-                  <span key={p} className="rounded-md border border-line px-2.5 py-[5px] text-xs text-soft">
-                    {phaseLabel(p)}
-                  </span>
-                ))}
-              </div>
-              <span className="text-xs text-faint">New projects start with these. Admins can rename, add, remove and reorder phases for each project.</span>
-            </div>
           </Card>
         )}
 
@@ -139,6 +133,27 @@ export function SettingsView() {
 
       {mode === "demo" && <DemoData />}
     </Page>
+  );
+}
+
+/** Light, dark or system. Saved on this device straight away, so it isn't part of Save changes. */
+function Appearance() {
+  const { preference, setPreference } = useTheme();
+  return (
+    <Card as="section" aria-labelledby="s-appearance" className="flex flex-wrap items-center justify-between gap-4 p-6">
+      <SectionHead id="s-appearance" title="Appearance" hint="Applies straight away on this device" />
+      <TabGroup
+        role="group"
+        label="Theme"
+        value={preference}
+        onChange={setPreference}
+        items={[
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+          { value: "system", label: "System" },
+        ]}
+      />
+    </Card>
   );
 }
 

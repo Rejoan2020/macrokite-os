@@ -1,61 +1,156 @@
 @import "tailwindcss";
 
-/* Macrokite OS design tokens (dark theme). Source: macrokite-os-design/tokens.css */
+/*
+ * Macrokite OS design tokens. Dark is the default; [data-theme="light"] on <html> switches to light.
+ * The theme script in the root layout sets data-theme from the saved preference (or the system
+ * setting) before the first paint.
+ */
 :root {
-  --bg-page: #0b0c0e;
-  --bg-sidebar: #0e1012;
-  --bg-card: #121417;
-  --bg-input: #0e1012;
-  --bg-hover: #1a1d21;
-  --bg-selected: #1f2226;
-  --bg-bubble: #17191d;
+  --bg-page: #0e0f11;
+  --bg-sidebar: #17181b;
+  --bg-card: #17181b;
+  --bg-input: #1f2024;
+  --bg-hover: #222428;
+  --bg-selected: #292b30;
+  --bg-bubble: #222428;
+  --bg-raised: #1f2024; /* rows and tiles inside a card */
+  --card-border: transparent;
 
-  --border: #24272c;
-  --border-row: #1c1f23;
-  --border-sidebar: #1f2226;
-  --border-dashed: #2a2e34;
+  --border: #2a2c31;
+  --border-row: #232529;
+  --border-sidebar: #26282c;
+  --border-dashed: #3a3d43;
 
-  --text-strong: #f2f3f5;
-  --text: #e7e8ea;
-  --text-body: #d5d7db;
-  --text-soft: #c9ccd1;
-  --text-secondary: #a7abb3;
-  --text-muted: #8a8f98;
-  --text-faint: #6f747c;
+  --text-strong: #f6f6f7;
+  --text: #ebebed;
+  --text-body: #d7d8db;
+  --text-soft: #c5c7cb;
+  --text-secondary: #a4a7ad;
+  --text-muted: #8a8d94;
+  --text-faint: #6c6f76;
 
-  --accent: #3fe0b5;
-  --accent-on: #062a20;
-  --accent-light: #8af0d3;
-  --accent-tint: #0f2e27;
-  --accent-tint-text: #d9fbf0;
-  --decision-bg: #0d1f1b;
-  --decision-border: #1f4a3f;
-  --decision-divider: #173a32;
-  --decision-meta: #7fbfae;
+  --primary: #f6f6f7; /* white pill buttons */
+  --primary-on: #121315;
+  --primary-hover: #ffffff;
 
-  --danger: #ff8f7a;
-  --danger-border: #4a2a25;
-  --danger-outline: #3a2420;
+  --accent: #f26b3a;
+  --accent-on: #ffffff;
+  --accent-light: #ff8a5e;
+  --accent-tint: #3a1f16;
+  --accent-tint-text: #ffd5c4;
 
-  --warning: #ffd7a1;
-  --warning-strong: #ffc98a;
-  --warning-tint: #33260f;
-  --warning-banner-bg: #17140d;
-  --warning-banner-border: #3d3218;
+  --success: #34c77b;
+  --success-tint: #13291e;
+  --success-text: #5fd99a;
+  --info: #5b8def;
+  --info-tint: #18243a;
+  --info-text: #8fb3ff;
+
+  --decision-bg: #12201a;
+  --decision-border: #22402f;
+  --decision-divider: #1b3327;
+  --decision-meta: #7fbf9c;
+
+  --danger: #ff7a68;
+  --danger-border: #4d2a24;
+  --danger-outline: #3a211c;
+
+  --warning: #f7c35c;
+  --warning-strong: #f5b83d;
+  --warning-tint: #33270f;
+  --warning-banner-bg: #1d1910;
+  --warning-banner-border: #43361a;
 
   --phase-done: var(--accent);
   --phase-current: var(--accent-light);
-  --phase-todo: #24272c;
-  --phase-done-hold: #5a5f66;
-  --phase-current-hold: #8a8f98;
+  --phase-todo: #2c2e33;
+  --phase-done-hold: #5a5d63;
+  --phase-current-hold: #8a8d94;
 
-  --avatar-teal-bg: #1b3a32;   --avatar-teal-fg: #8af0d3;
-  --avatar-violet-bg: #2b2442; --avatar-violet-fg: #c9bfff;
-  --avatar-amber-bg: #3a2a1a;  --avatar-amber-fg: #ffc98a;
-  --avatar-blue-bg: #1f2e3d;   --avatar-blue-fg: #a9cff5;
+  --chart-dot: #5b8def;
+  --chart-line: #3a3d43;
+
+  --avatar-teal-bg: #183a31;   --avatar-teal-fg: #7fe8c8;
+  --avatar-violet-bg: #2c2545; --avatar-violet-fg: #c9bfff;
+  --avatar-amber-bg: #41261b;  --avatar-amber-fg: #ff9f7a;
+  --avatar-blue-bg: #1d2d40;   --avatar-blue-fg: #a9cff5;
 
   --overlay: rgb(3 4 5 / 0.7);
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.45);
   color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg-page: #f2f2f3;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #f3f4f5;
+  --bg-hover: #eef0f2;
+  --bg-selected: #e6e8eb;
+  --bg-bubble: #f1f2f4;
+  --bg-raised: #f6f7f8;
+  --card-border: #e7e8eb;
+
+  --border: #e2e4e8;
+  --border-row: #eceef1;
+  --border-sidebar: #eceef1;
+  --border-dashed: #d2d5da;
+
+  --text-strong: #111214;
+  --text: #1c1e21;
+  --text-body: #2d3034;
+  --text-soft: #3d4045;
+  --text-secondary: #5b5f66;
+  --text-muted: #73777f;
+  --text-faint: #979ba2;
+
+  --primary: #16171a;
+  --primary-on: #ffffff;
+  --primary-hover: #000000;
+
+  --accent: #ea5a24;
+  --accent-on: #ffffff;
+  --accent-light: #c94a18;
+  --accent-tint: #fde9e0;
+  --accent-tint-text: #9a3410;
+
+  --success: #1f9d5c;
+  --success-tint: #def5e8;
+  --success-text: #137a45;
+  --info: #2f6fe0;
+  --info-tint: #e3ecfc;
+  --info-text: #2459b8;
+
+  --decision-bg: #eef8f2;
+  --decision-border: #c8e8d5;
+  --decision-divider: #d9efe2;
+  --decision-meta: #3f8a62;
+
+  --danger: #d6402f;
+  --danger-border: #f2c3bc;
+  --danger-outline: #fde5e1;
+
+  --warning: #94600f;
+  --warning-strong: #b7791f;
+  --warning-tint: #fbefd6;
+  --warning-banner-bg: #fdf6e7;
+  --warning-banner-border: #f0dcae;
+
+  --phase-todo: #e3e5e9;
+  --phase-done-hold: #a3a7ae;
+  --phase-current-hold: #c4c7cc;
+
+  --chart-dot: #2f6fe0;
+  --chart-line: #d2d5da;
+
+  --avatar-teal-bg: #d6f3ea;   --avatar-teal-fg: #12775b;
+  --avatar-violet-bg: #e7e1fb; --avatar-violet-fg: #5b45c4;
+  --avatar-amber-bg: #fde3d6;  --avatar-amber-fg: #b44a1c;
+  --avatar-blue-bg: #dce8f8;   --avatar-blue-fg: #2c5f9e;
+
+  --overlay: rgb(17 18 20 / 0.35);
+  --shadow: 0 12px 32px rgb(17 18 20 / 0.12);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -66,6 +161,8 @@
   --color-hover: var(--bg-hover);
   --color-selected: var(--bg-selected);
   --color-bubble: var(--bg-bubble);
+  --color-raised: var(--bg-raised);
+  --color-card-line: var(--card-border);
 
   --color-line: var(--border);
   --color-row: var(--border-row);
@@ -80,11 +177,23 @@
   --color-muted: var(--text-muted);
   --color-faint: var(--text-faint);
 
+  --color-primary: var(--primary);
+  --color-primary-on: var(--primary-on);
+  --color-primary-hover: var(--primary-hover);
+
   --color-accent: var(--accent);
   --color-accent-on: var(--accent-on);
   --color-accent-light: var(--accent-light);
   --color-accent-tint: var(--accent-tint);
   --color-accent-tint-text: var(--accent-tint-text);
+
+  --color-success: var(--success);
+  --color-success-tint: var(--success-tint);
+  --color-success-text: var(--success-text);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+  --color-info-text: var(--info-text);
+
   --color-decision: var(--decision-bg);
   --color-decision-line: var(--decision-border);
   --color-decision-divider: var(--decision-divider);
@@ -102,6 +211,8 @@
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --shadow-pop: var(--shadow);
 }
 
 /* Base styles live in the base layer so Tailwind utilities can override them. */
@@ -125,6 +236,14 @@
 
   input[type="checkbox"] {
     accent-color: var(--accent);
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+  :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator,
+  :root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 
   ::selection {
@@ -156,6 +275,12 @@
 .avatar-violet { background: var(--avatar-violet-bg); color: var(--avatar-violet-fg); }
 .avatar-amber { background: var(--avatar-amber-bg); color: var(--avatar-amber-fg); }
 .avatar-blue { background: var(--avatar-blue-bg); color: var(--avatar-blue-fg); }
+
+/* The striped fill of the Overview's completion bar. */
+.bar-stripes {
+  background-color: var(--text-strong);
+  background-image: repeating-linear-gradient(115deg, transparent 0 10px, var(--bg-card) 10px 11.5px);
+}
 
 /* Hover-revealed row actions stay visible on touch screens. */
 .reveal { opacity: 0; }

@@ -105,9 +105,9 @@ export function LinkCards({ body }) {
       href={link.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex max-w-[460px] gap-3.5 rounded-[10px] border border-line bg-card p-3 hover:border-dash"
+      className="flex max-w-[460px] gap-3.5 rounded-2xl border border-line bg-raised p-3 hover:border-dash"
     >
-      <span aria-hidden className="flex size-[72px] shrink-0 items-center justify-center rounded-lg bg-hover text-faint">
+      <span aria-hidden className="flex size-[72px] shrink-0 items-center justify-center rounded-xl bg-hover text-faint">
         {PLATFORM_ICONS[link.platform]}
       </span>
       <span className="flex min-w-0 flex-col justify-center gap-1">
@@ -146,7 +146,7 @@ export function ChannelMessage({ message, onCreateTask }) {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-baseline gap-2">
           <span className="font-semibold">{author?.name ?? "Former member"}</span>
-          <time dateTime={message.createdAt} className="font-mono text-[11px] text-faint">
+          <time dateTime={message.createdAt} className="text-[11px] text-faint">
             {formatTime(message.createdAt)}
           </time>
         </div>
@@ -157,7 +157,7 @@ export function ChannelMessage({ message, onCreateTask }) {
         <button
           type="button"
           onClick={() => onCreateTask(message)}
-          className="reveal absolute -top-1 right-0 flex h-8 items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 text-xs text-secondary transition-opacity hover:text-fg"
+          className="reveal absolute -top-1 right-0 flex h-8 items-center gap-1.5 rounded-full border border-line bg-card px-2.5 text-xs text-secondary transition-opacity hover:text-fg"
         >
           <ListPlus className="size-3.5" aria-hidden />
           Create task
@@ -252,7 +252,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
   return (
     <form onSubmit={send} className="relative flex flex-col gap-2">
       {open && (
-        <ul id={listId} role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-xl border border-line bg-card py-1 shadow-lg">
+        <ul id={listId} role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-pop">
           {suggestions.map((user, i) => (
             <li
               key={user._id}
@@ -271,7 +271,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           ))}
         </ul>
       )}
-      <label className={cx("flex items-end gap-2.5 border border-dash bg-card", compact ? "rounded-[10px] p-2 pl-3.5" : "rounded-xl p-2.5 pl-4")}>
+      <label className={cx("flex items-end gap-2 border border-transparent bg-input focus-within:border-accent/50", compact ? "rounded-[24px] p-1.5 pl-4" : "rounded-[26px] p-2 pl-5")}>
         <span className="sr-only">{label}</span>
         <textarea
           ref={ref}
@@ -292,7 +292,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open ? `${listId}-${active}` : undefined}
-          className="min-w-0 flex-1 resize-none bg-transparent py-2.5 leading-normal text-fg outline-none placeholder:text-muted"
+          className="min-w-0 flex-1 resize-none bg-transparent py-2 leading-normal text-fg outline-none placeholder:text-muted"
         />
         <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!body.trim()} className={compact ? "h-10" : ""}>
           Send

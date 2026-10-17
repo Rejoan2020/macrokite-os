@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_TASK_PRIORITY, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
+import { DEFAULT_TASK_PRIORITY, REMINDER_OPTIONS, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
 import { MAX_PHASES } from "./phases";
 
 // Input schemas shared by demo mode (browser) and database mode (route handlers).
@@ -56,6 +56,17 @@ export const projectInput = z.object({
   memberIds: ids,
   leadIds: ids,
   notes: text(20000).default(""),
+  clientId: optionalId, // null: a company project
+});
+
+export const clientInput = z.object({
+  name: required("Client name", 120),
+  description: text(240).default(""),
+});
+
+export const groupInput = z.object({
+  name: required("Group name", 80),
+  memberIds: ids,
 });
 
 export const taskInput = z.object({
@@ -63,7 +74,7 @@ export const taskInput = z.object({
   phase: phaseId,
   title: required("Title", 200),
   description: text(5000).default(""),
-  assigneeId: z.string({ message: "Choose who is doing this" }).trim().min(1, "Choose who is doing this").max(64),
+  assigneeIds: ids, // may be empty: nobody picked yet
   status: z.enum(TASK_STATUSES, { message: "Choose a status" }),
   priority: z.enum(TASK_PRIORITIES, { message: "Choose a priority" }).default(DEFAULT_TASK_PRIORITY),
   dueDate: isoDate,
@@ -79,6 +90,20 @@ export const meetingInput = z.object({
   callUrl: httpUrl("Call link"),
   attendeeIds: ids,
   notes: text(20000).default(""),
+  // Agenda topics as plain lines; blank ones are dropped. Leave out to keep the agenda as it is.
+  agenda: z
+    .array(z.string().trim().max(200, "Keep each topic to 200 characters"))
+    .max(50, "Use 50 topics or fewer")
+    .transform((lines) => lines.filter(Boolean))
+    .optional(),
+});
+
+/** Your reminder for a meeting: minutes before it starts, or null for none. */
+export const reminderInput = z.object({
+  minutes: z
+    .number()
+    .nullable()
+    .refine((m) => m === null || REMINDER_OPTIONS.includes(m), "Choose one of the reminder times"),
 });
 
 export const lineInput = (label, max = 300) => z.object({ text: required(label, max) });

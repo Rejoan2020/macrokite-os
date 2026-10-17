@@ -5,10 +5,10 @@ import { MoreHorizontal } from "lucide-react";
 import { cx } from "./primitives";
 
 /**
- * A "⋯" button with a short list of actions. Items: [{ label, onClick, tone? }] where
+ * A "⋯" button (or another icon) with a short list of actions. Items: [{ label, onClick, tone? }] where
  * tone="danger" colors the item. Closes on pick, outside click or Escape.
  */
-export function ActionMenu({ label = "More actions", items }) {
+export function ActionMenu({ label = "More actions", items, icon: Icon = MoreHorizontal, buttonClassName }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const buttonRef = useRef(null);
@@ -43,12 +43,12 @@ export function ActionMenu({ label = "More actions", items }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className={cx("flex size-11 items-center justify-center rounded-lg border border-line bg-card text-secondary hover:border-dash hover:text-fg", open && "border-dash text-fg")}
+        className={buttonClassName ?? cx("flex size-11 items-center justify-center rounded-full border border-line text-secondary hover:bg-hover hover:text-fg", open && "bg-hover text-fg")}
       >
-        <MoreHorizontal className="size-5" aria-hidden />
+        <Icon className="size-5" aria-hidden />
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={label} className="absolute top-full right-0 z-30 mt-1.5 w-52 rounded-xl border border-line bg-card py-1.5 shadow-lg">
+        <div id={menuId} role="menu" aria-label={label} className="absolute top-full right-0 z-30 mt-1.5 w-52 rounded-2xl border border-line bg-card py-1.5 shadow-pop">
           {items.map((item) => (
             <button
               key={item.label}
@@ -58,7 +58,7 @@ export function ActionMenu({ label = "More actions", items }) {
                 setOpen(false);
                 item.onClick();
               }}
-              className={cx("mx-1.5 flex w-[calc(100%-12px)] items-center rounded-lg px-2.5 py-2 text-left text-[13px] outline-none hover:bg-hover focus-visible:bg-hover", item.tone === "danger" ? "text-danger" : "text-fg")}
+              className={cx("mx-1.5 flex w-[calc(100%-12px)] items-center rounded-xl px-2.5 py-2 text-left text-[13px] outline-none hover:bg-hover focus-visible:bg-hover", item.tone === "danger" ? "text-danger" : "text-fg")}
             >
               {item.label}
             </button>

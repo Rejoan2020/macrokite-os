@@ -118,10 +118,12 @@ export function WorkspaceProvider({ children }) {
     const projectChats = {};
     const dms = {};
     const tasks = {}; // task discussions by taskId
+    const groups = []; // groups the current user is in
     for (const c of data.conversations) {
       if (c.type === "project") projectChats[c.projectId] = c;
       if (c.type === "dm" && c.memberIds.includes(currentUserId)) dms[c.memberIds.find((id) => id !== currentUserId) ?? currentUserId] = c;
       if (c.type === "task") tasks[c.taskId] = c;
+      if (c.type === "group" && c.memberIds.includes(currentUserId)) groups.push(c);
     }
     const currentUser = users[currentUserId];
     return {
@@ -139,13 +141,15 @@ export function WorkspaceProvider({ children }) {
       isAdmin: currentUser?.role === "admin",
       activeUsers: data.users.filter((u) => u.active),
       unread: unreadByConversation(data, currentUserId),
-      chats: { general, projects: projectChats, dms, tasks },
+      chats: { general, projects: projectChats, dms, tasks, groups },
       lookup: {
         users,
+        clients: indexById(data.clients),
         projects: indexById(data.projects),
         tasks: indexById(data.tasks),
         meetings: indexById(data.meetings),
         messages: indexById(data.messages),
+        conversations: indexById(data.conversations),
       },
     };
   }, [data, status, error, mode, account, onboarding, load, dispatch, refresh, resetDemo, currentUserId]);

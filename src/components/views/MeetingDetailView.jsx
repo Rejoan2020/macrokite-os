@@ -8,10 +8,16 @@ import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { useOpenTask, useTaskManagement } from "@/components/tasks/taskHooks";
-import { Button, Checkbox, cx, EmptyNote, IconButton, Page, Pill, SectionLabel } from "@/components/ui/primitives";
+import { Breadcrumbs, Button, Checkbox, cx, EmptyNote, IconButton, Page, Pill, SectionLabel } from "@/components/ui/primitives";
+import { taskAssigneeIds } from "@/lib/constants";
 import { useAction } from "@/lib/client/useAction";
 import { firstName, formatDue, formatShortDate, formatWhen, joinNames, pluralize, todayISO } from "@/lib/format";
 import { actionItems, isOverdue, previousMeeting, stillOpenFromLast } from "@/lib/selectors";
+
+/** "Sara, Tanvir", or "Unassigned". */
+function assigneeNames(task, users) {
+  return taskAssigneeIds(task).map((id) => firstName(users[id]?.name ?? "Former member")).join(", ") || "Unassigned";
+}
 import { parseActionItem, parseDay } from "@/lib/text";
 
 export function MeetingDetailView() {
@@ -42,14 +48,12 @@ export function MeetingDetailView() {
 
   return (
     <Page width="sm" className="gap-[22px]">
-      <Link href="/meetings" className="self-start text-[13px] text-muted hover:text-fg">
-        ← Meetings
-      </Link>
+      <Breadcrumbs items={[{ label: "Meetings", href: "/meetings" }, { label: meeting.title }]} />
 
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.02em] text-strong">{meeting.title}</h1>
+            <h1 className="text-[32px] leading-tight font-medium tracking-[-0.025em] text-strong">{meeting.title}</h1>
             {meeting.endedAt && <Pill tone="neutral">Ended</Pill>}
           </div>
           <p className="text-muted">
@@ -79,7 +83,7 @@ export function MeetingDetailView() {
       </header>
 
       {stillOpen.length > 0 && (
-        <section aria-label="Still open from last meeting" className="flex flex-col gap-1.5 rounded-[10px] border border-warning-line bg-warning-bg px-4 py-3 text-warning">
+        <section aria-label="Still open from last meeting" className="flex flex-col gap-1.5 rounded-2xl border border-warning-line bg-warning-bg px-5 py-3.5 text-warning">
           {stillOpen.length > 1 && (
             <p>
               Still open from <LastMeetingLink meeting={previous} />:
@@ -97,7 +101,7 @@ export function MeetingDetailView() {
       <ActionItems meeting={meeting} project={project} />
 
       <p className="text-xs leading-relaxed text-faint">
-        Decisions go straight to the {project?.name} decision log and action items are real tasks for each person.
+        Action items are real tasks in {project?.name} for each person.
         {meeting.endedAt ? " This meeting has ended; you can still add to it." : " When you end the meeting, each person gets one notification listing their action items."}
       </p>
     </Page>
@@ -120,7 +124,7 @@ function OpenItem({ task, prefix }) {
     <div className={cx("flex flex-wrap items-center justify-between gap-2.5", !prefix && "pl-3")}>
       <span>
         {prefix}
-        <span className="text-strong">{task.title}</span> · {firstName(lookup.users[task.assigneeId]?.name)}
+        <span className="text-strong">{task.title}</span> · {assigneeNames(task, lookup.users)}
         {due && ` · ${due}`}
       </span>
       <button type="button" onClick={() => openTask(task)} className="text-[13px] text-warning-strong hover:text-warning">
@@ -140,7 +144,7 @@ function AddLine({ placeholder, label, onAdd, tone = "default" }) {
   };
   return (
     <form onSubmit={submit} className="flex min-h-11 items-center gap-3">
-      <span aria-hidden className={cx("w-[18px] text-center", tone === "decision" ? "text-[#4c8a7a]" : "text-faint")}>
+      <span aria-hidden className={cx("w-[18px] text-center", tone === "decision" ? "text-decision-meta" : "text-faint")}>
         +
       </span>
       <label className="flex-1">
@@ -149,7 +153,7 @@ function AddLine({ placeholder, label, onAdd, tone = "default" }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={placeholder}
-          className={cx("h-9 w-full min-w-0 bg-transparent outline-none placeholder:text-faint", tone === "decision" ? "text-accent-tint-text placeholder:text-decision-meta/70" : "text-fg")}
+          className={cx("h-9 w-full min-w-0 bg-transparent outline-none placeholder:text-faint", tone === "decision" ? "text-strong placeholder:text-decision-meta/70" : "text-fg")}
         />
       </label>
     </form>
@@ -161,7 +165,7 @@ function Agenda({ meeting }) {
   return (
     <section aria-labelledby="s-agenda" className="flex flex-col gap-2.5">
       <SectionLabel id="s-agenda">Agenda</SectionLabel>
-      <div className="rounded-xl border border-line bg-card px-4 py-1.5">
+      <div className="rounded-[22px] border border-card-line bg-card px-5 py-2">
         {meeting.agenda.map((item) => (
           <div key={item._id} className="group flex min-h-11 items-center gap-3 border-b border-row">
             <label className="flex flex-1 cursor-pointer items-center gap-3">
@@ -217,7 +221,7 @@ function Notes({ meeting }) {
           onChange={(e) => setNotes(e.target.value)}
           onBlur={save}
           placeholder="Write anything…"
-          className="flex-1 resize-y rounded-xl border border-line bg-card px-4 py-3.5 leading-[1.65] text-body outline-none placeholder:text-faint focus:border-accent/60"
+          className="flex-1 resize-y rounded-[22px] border border-card-line bg-card px-5 py-4 leading-[1.65] text-body outline-none placeholder:text-faint focus:border-accent/60"
         />
       </label>
     </section>
@@ -228,17 +232,17 @@ function Decisions({ meeting }) {
   const { run } = useAction();
   return (
     <section aria-labelledby="s-decisions" className="flex flex-col gap-2.5">
-      <SectionLabel id="s-decisions" className="!text-accent-light">
+      <SectionLabel id="s-decisions" className="!text-success-text">
         Decisions
       </SectionLabel>
-      <div className="rounded-xl border border-decision-line bg-decision px-4 py-1.5">
+      <div className="rounded-[22px] border border-decision-line bg-decision px-5 py-2">
         {meeting.decisions.map((d) => (
-          <div key={d._id} className="group flex min-h-11 items-center gap-3 border-b border-decision-divider text-accent-tint-text">
-            <span aria-hidden className="w-[18px] text-center text-accent">
+          <div key={d._id} className="group flex min-h-11 items-center gap-3 border-b border-decision-divider text-strong">
+            <span aria-hidden className="w-[18px] text-center text-success">
               ✓
             </span>
             <span className="flex-1 py-2">{d.text}</span>
-            <IconButton icon={X} label="Remove decision" className="reveal hover:bg-accent-tint" onClick={() => run({ type: "decision.remove", id: meeting._id, data: { itemId: d._id } })} />
+            <IconButton icon={X} label="Remove decision" className="reveal hover:bg-success-tint" onClick={() => run({ type: "decision.remove", id: meeting._id, data: { itemId: d._id } })} />
           </div>
         ))}
         <AddLine tone="decision" label="New decision" placeholder="Add a decision" onAdd={(text) => run({ type: "decision.add", id: meeting._id, data: { text } }, { silent: true })} />
@@ -262,7 +266,7 @@ function ActionItems({ meeting, project }) {
 
   const create = async ({ title, assigneeId, dueDate }) => {
     const ok = await run(
-      { type: "task.create", data: { projectId: meeting.projectId, meetingId: meeting._id, title, assigneeId, dueDate } },
+      { type: "task.create", data: { projectId: meeting.projectId, meetingId: meeting._id, title, assigneeIds: assigneeId ? [assigneeId] : [], dueDate } },
       { silent: true }
     );
     if (ok) setDraft(null);
@@ -291,14 +295,14 @@ function ActionItems({ meeting, project }) {
   return (
     <section aria-labelledby="s-actions" className="flex flex-col gap-2.5">
       <SectionLabel id="s-actions">Action items</SectionLabel>
-      <div className="rounded-xl border border-line bg-card px-4 py-1.5">
+      <div className="rounded-[22px] border border-card-line bg-card px-5 py-2">
         {items.map((t) => (
           <div key={t._id} className="flex min-h-11 flex-wrap items-center gap-3 border-b border-row py-1.5">
             <button type="button" onClick={() => openTask(t)} className={cx("flex-[1_1_220px] text-left hover:text-strong", t.status === "done" && "text-muted line-through")}>
               {t.title}
             </button>
             <span className={cx("text-[13px]", isOverdue(t, today) ? "text-danger" : "text-secondary")}>
-              {firstName(lookup.users[t.assigneeId]?.name)}
+              {assigneeNames(t, lookup.users)}
               {t.dueDate && ` · ${formatDue(t.dueDate, today)}`}
             </span>
           </div>
@@ -343,7 +347,7 @@ function DraftPrompt({ draft, candidates, onResolve, onCancel }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               aria-label="Task title"
-              className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-input px-3 outline-none focus:border-accent/60"
+              className="h-9 min-w-0 flex-1 rounded-full border border-transparent bg-input px-4 outline-none focus:border-accent/60"
             />
             <Button size="sm" variant="primary" type="submit">
               Add
@@ -363,7 +367,7 @@ function DraftPrompt({ draft, candidates, onResolve, onCancel }) {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               aria-label="Due date"
-              className="h-9 rounded-lg border border-line bg-input px-3 outline-none focus:border-accent/60"
+              className="h-9 rounded-full border border-transparent bg-input px-4 outline-none focus:border-accent/60"
             />
             <Button size="sm" variant="primary" disabled={!date || !parseDay(date)} onClick={() => onResolve({ solved: "day", values: { dueDate: date } })}>
               Set date

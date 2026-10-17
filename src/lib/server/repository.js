@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { applyAction, DomainError } from "../engine";
 import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembership, rejoinedMember, renamedCompanyProject } from "../membership";
 import { SCHEMA_VERSION } from "../seed";
+import { normalizeSnapshot } from "../compat";
 import { notificationEmails } from "../emails";
 import { connectToDatabase } from "./db";
 import { appUrl } from "./email";
@@ -100,7 +101,7 @@ async function loadSnapshot(orgId) {
     await Project.updateOne({ _id: renamed._id, orgId: org._id, name: "Internal" }, { $set: { name: renamed.name, updatedAt: renamed.updatedAt } });
     snapshot.projects = snapshot.projects.map((p) => (p._id === renamed._id ? renamed : p));
   }
-  return snapshot;
+  return normalizeSnapshot(snapshot);
 }
 
 async function persistChanges(org, changes) {

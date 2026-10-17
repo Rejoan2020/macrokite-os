@@ -4,37 +4,39 @@ import { useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { announceInvite, useAction } from "@/lib/client/useAction";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Button } from "@/components/ui/primitives";
+import { Button, PersonChip } from "@/components/ui/primitives";
+import { PeopleMenu } from "@/components/ui/PeopleMenu";
 import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { Field, Input, PeoplePicker, Select, Textarea } from "@/components/ui/form";
-import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskPriority } from "@/lib/constants";
-import { DEFAULT_PHASES, projectPhases } from "@/lib/phases";
-import { newPhaseRow, PhaseEditor } from "./PhaseEditor";
-import { pluralize, toLocalInput } from "@/lib/format";
-import { canChooseLeads, canEditPhases, projectLeadIds } from "@/lib/permissions";
+import { COMPANY_LABEL, DEFAULT_TASK_PRIORITY, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskAssigneeIds, taskPriority } from "@/lib/constants";
+import { projectPhases } from "@/lib/phases";
+import { firstName, pluralize, toLocalInput } from "@/lib/format";
+import { canChooseLeads, projectLeadIds } from "@/lib/permissions";
 import { MessageSquare } from "lucide-react";
 import { useTaskManagement, useTaskThreadSummary } from "@/components/tasks/taskHooks";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { projectOwner } from "@/lib/selectors";
 
-const phaseOptionsFor = (project) => projectPhases(project).map((p) => ({ value: p._id, label: p.name }));
-
+/** Projects as "Client · Project" options, company projects first. */
 function useProjectOptions(includeId, allowed = () => true) {
-  const { data } = useWorkspace();
+  const { data, lookup } = useWorkspace();
   return data.projects
     .filter((p) => (!p.archived && allowed(p)) || p._id === includeId)
-    .sort((a, b) => Number(a.isInternal) - Number(b.isInternal) || a.name.localeCompare(b.name))
-    .map((p) => ({ value: p._id, label: p.name }));
+    .map((p) => ({ project: p, owner: projectOwner(p, lookup.clients) }))
+    .sort((a, b) => Number(Boolean(a.owner.clientId)) - Number(Boolean(b.owner.clientId)) || a.owner.label.localeCompare(b.owner.label) || a.project.name.localeCompare(b.project.name))
+    .map(({ project, owner }) => ({ value: project._id, label: `${owner.label} · ${project.name}` }));
 }
 
 function FormFooter({ formId, busy, label, onClose, onDelete, deleteLabel }) {
   return (
     <>
       {onDelete && (
-        <Button variant="danger" size="sm" onClick={onDelete} className="mr-auto">
+        <button type="button" onClick={onDelete} className="mr-auto rounded-full px-2 py-2 font-medium text-accent hover:text-accent-light">
           {deleteLabel}
-        </Button>
+        </button>
       )}
-      <Button variant="quiet" onClick={onClose}>
+      <Button variant="outline" onClick={onClose}>
         Cancel
       </Button>
       <Button variant="primary" type="submit" form={formId} loading={busy}>
@@ -46,45 +48,32 @@ function FormFooter({ formId, busy, label, onClose, onDelete, deleteLabel }) {
 
 // ------------------------------------------------------------------ project
 
-export function ProjectDialog({ open, project, onClose, onSaved }) {
-  return open ? <ProjectForm key={project?._id ?? "new"} project={project} onClose={onClose} onSaved={onSaved} /> : null;
+export function ProjectDialog({ open, project, defaults, onClose, onSaved }) {
+  return open ? <ProjectForm key={project?._id ?? "new"} project={project} defaults={defaults} onClose={onClose} onSaved={onSaved} /> : null;
 }
 
-function ProjectForm({ project, onClose, onSaved }) {
+function ProjectForm({ project, defaults = {}, onClose, onSaved }) {
   const { data, activeUsers, currentUserId, currentUser } = useWorkspace();
   const chooseLeads = canChooseLeads(currentUser);
-  const editPhases = canEditPhases(currentUser);
   const { run, busy, fieldErrors } = useAction();
   const [values, setValues] = useState({
     name: project?.name ?? "",
     description: project?.description ?? "",
-    phase: project?.phase ?? "",
-    phases: (project ? projectPhases(project) : DEFAULT_PHASES).map(newPhaseRow),
     deadline: project?.deadline ?? "",
     memberIds: project?.memberIds ?? [currentUserId],
     leadIds: project ? projectLeadIds(project) : [currentUserId],
+    clientId: project ? project.clientId ?? "" : defaults.clientId ?? "",
   });
+  const clientOptions = [...data.clients].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c._id, label: c.name }));
   const memberUsers = activeUsers.filter((u) => values.memberIds.includes(u._id));
-  // The current phase can be any saved phase that is still in the list (new ones exist once saved).
-  const currentOptions = values.phases.filter((p) => p._id && projectPhases(project).some((saved) => saved._id === p._id)).map((p) => ({ value: p._id, label: p.name || "Untitled" }));
-  const lockedReason = (row) => {
-    if (!project || !row._id) return null;
-    if (row._id === values.phase) return "it’s the current phase";
-    const left = data.tasks.filter((t) => t.projectId === project._id && t.phase === row._id).length;
-    return left ? `it still has ${pluralize(left, "task")}` : null;
-  };
-  const phaseRowErrors = Object.fromEntries(values.phases.map((_, i) => [i, fieldErrors[`phases.${i}.name`]]).filter(([, e]) => e));
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
-    // Only admins send leads and phases; for everyone else the server keeps them.
-    const { leadIds, phases, phase, ...rest } = values;
-    const payload = { ...rest };
+    // Only admins send leads; for everyone else the server keeps them.
+    const { leadIds, ...rest } = values;
+    const payload = { ...rest, clientId: rest.clientId || null };
     if (chooseLeads) payload.leadIds = leadIds.filter((id) => values.memberIds.includes(id));
-    if (editPhases) payload.phases = phases.map(({ _id, name }) => (_id ? { _id, name } : { name }));
-    // A new project starts in its first phase.
-    if (project) payload.phase = phase;
     const result = project
       ? await run({ type: "project.update", id: project._id, data: payload }, { success: "Project updated" })
       : await run({ type: "project.create", data: payload }, { success: "Project created" });
@@ -108,31 +97,16 @@ function ProjectForm({ project, onClose, onSaved }) {
         <Field label="Description" hint="One line, shown under the name everywhere" error={fieldErrors.description}>
           {(p) => <Input {...p} value={values.description} onChange={set("description")} />}
         </Field>
+        {!project?.isInternal && (
+          <Field label="For" hint="A client, or the company itself" error={fieldErrors.clientId}>
+            {(p) => <Select {...p} value={values.clientId} onChange={set("clientId")} options={[{ value: "", label: COMPANY_LABEL }, ...clientOptions]} />}
+          </Field>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {project && (
-            <Field label="Current phase" error={fieldErrors.phase}>
-              {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={currentOptions} />}
-            </Field>
-          )}
           <Field label="Deadline" error={fieldErrors.deadline}>
             {(p) => <Input {...p} type="date" value={values.deadline} onChange={set("deadline")} />}
           </Field>
         </div>
-        {editPhases && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-[13px] font-medium text-secondary">Phases</legend>
-            <p className="-mt-1 mb-1 text-xs text-faint">
-              {project ? "Rename, add, remove or reorder this project’s phases." : "The project starts in the first phase. Rename, add, remove or reorder them to fit this project."}
-            </p>
-            <PhaseEditor
-              rows={values.phases}
-              onChange={(phases) => setValues((v) => ({ ...v, phases }))}
-              lockedReason={lockedReason}
-              error={fieldErrors.phases}
-              rowErrors={phaseRowErrors}
-            />
-          </fieldset>
-        )}
         <Field label="Members" error={fieldErrors.memberIds}>
           {(p) => <PeoplePicker {...p} users={activeUsers} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
         </Field>
@@ -174,7 +148,7 @@ function TaskForm({ task, defaults = {}, onClose }) {
     description: task?.description ?? defaults.description ?? "",
     projectId: initialProject,
     phase: task?.phase ?? defaults.phase ?? lookup.projects[initialProject]?.phase ?? projectPhases(lookup.projects[initialProject])[0]._id,
-    assigneeId: task?.assigneeId ?? defaults.assigneeId ?? currentUserId,
+    assigneeIds: task ? taskAssigneeIds(task) : defaults.assigneeIds ?? [currentUserId],
     dueDate: task?.dueDate ?? defaults.dueDate ?? "",
     priority: task ? taskPriority(task) : defaults.priority ?? DEFAULT_TASK_PRIORITY,
     status: task?.status ?? "todo",
@@ -184,7 +158,8 @@ function TaskForm({ task, defaults = {}, onClose }) {
     const projectId = e.target.value;
     setValues((v) => ({ ...v, projectId, phase: lookup.projects[projectId]?.phase ?? v.phase }));
   };
-  const people = activeUsers.some((u) => u._id === values.assigneeId) ? activeUsers : [...activeUsers, lookup.users[values.assigneeId]].filter(Boolean);
+  // Former assignees stay pickable so saving doesn't silently drop them.
+  const people = [...activeUsers, ...values.assigneeIds.filter((id) => !activeUsers.some((u) => u._id === id)).map((id) => lookup.users[id]).filter(Boolean)];
 
   const submit = async (e) => {
     e.preventDefault();
@@ -225,12 +200,6 @@ function TaskForm({ task, defaults = {}, onClose }) {
             <Field label="Project" error={fieldErrors.projectId}>
               {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
             </Field>
-            <Field label="Phase" error={fieldErrors.phase}>
-              {(p) => <Select {...p} value={values.phase} onChange={set("phase")} options={phaseOptionsFor(lookup.projects[values.projectId])} />}
-            </Field>
-            <Field label="Assignee" error={fieldErrors.assigneeId}>
-              {(p) => <Select {...p} value={values.assigneeId} onChange={set("assigneeId")} options={people.map((u) => ({ value: u._id, label: u._id === currentUserId ? `${u.name} (me)` : u.name }))} />}
-            </Field>
             <Field label="Due date" error={fieldErrors.dueDate}>
               {(p) => <Input {...p} type="date" value={values.dueDate} onChange={set("dueDate")} />}
             </Field>
@@ -243,6 +212,9 @@ function TaskForm({ task, defaults = {}, onClose }) {
               </Field>
             )}
           </div>
+          <Field label="Assignees" hint="Pick one or more people, or leave it for later" error={fieldErrors.assigneeIds}>
+            {(p) => <PeoplePicker {...p} users={people} value={values.assigneeIds} onChange={(assigneeIds) => setValues((v) => ({ ...v, assigneeIds }))} />}
+          </Field>
           {task && <DiscussionLink taskId={task._id} onClick={onClose} />}
         </form>
       </Dialog>
@@ -266,7 +238,7 @@ function DiscussionLink({ taskId, onClick }) {
   return (
     <Link href={`/tasks/${taskId}`} onClick={onClick} className="flex items-center gap-2 self-start text-[13px] text-accent hover:text-accent-light">
       <MessageSquare className="size-4" aria-hidden />
-      {count ? `Open discussion · ${pluralize(count, "comment")}${unread ? ` (${unread} new)` : ""}` : "Open the task page to discuss it"}
+      {count ? `Open the task · ${pluralize(count, "comment")}${unread ? ` (${unread} new)` : ""}` : "Open the task page to comment on it"}
     </Link>
   );
 }
@@ -284,28 +256,33 @@ function defaultStart() {
 }
 
 function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
-  const { data, lookup, activeUsers } = useWorkspace();
+  const { data, lookup, activeUsers, currentUserId } = useWorkspace();
   const { run, busy, fieldErrors } = useAction();
   const [confirming, setConfirming] = useState(false);
-  const projectOptions = useProjectOptions(meeting?.projectId);
-  const internal = data.projects.find((p) => p.isInternal);
+  // Meetings still belong to a project; new ones go to the company project unless opened from one.
+  const internal = data.projects.find((p) => p.isInternal) ?? data.projects.find((p) => !p.archived);
   const projectId = meeting?.projectId ?? defaults.projectId ?? internal?._id ?? "";
   const [values, setValues] = useState({
-    projectId,
     title: meeting?.title ?? "",
     startsAt: meeting ? toLocalInput(meeting.startsAt) : defaultStart(),
+    agenda: meeting ? meeting.agenda.map((a, i) => `${i + 1}. ${a.title}`).join("\n") : "",
     callUrl: meeting?.callUrl ?? "",
-    attendeeIds: meeting?.attendeeIds ?? lookup.projects[projectId]?.memberIds ?? [],
+    attendeeIds: meeting?.attendeeIds ?? defaults.attendeeIds ?? [currentUserId],
   });
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
-  const setProject = (e) => {
-    const id = e.target.value;
-    setValues((v) => ({ ...v, projectId: id, attendeeIds: meeting ? v.attendeeIds : lookup.projects[id]?.memberIds ?? v.attendeeIds }));
-  };
+  const attendees = values.attendeeIds.map((id) => lookup.users[id]).filter(Boolean);
+  const candidates = activeUsers.filter((u) => !values.attendeeIds.includes(u._id));
+  const agendaError = fieldErrors.agenda ?? Object.entries(fieldErrors).find(([key]) => key.startsWith("agenda."))?.[1];
 
   const submit = async (e) => {
     e.preventDefault();
-    const payload = { ...values, startsAt: values.startsAt ? new Date(values.startsAt).toISOString() : "" };
+    const payload = {
+      ...values,
+      projectId,
+      startsAt: values.startsAt ? new Date(values.startsAt).toISOString() : "",
+      // "1. Topic" and "- Topic" are list markers, not part of the topic.
+      agenda: values.agenda.split("\n").map((line) => line.trim().replace(/^(\d+[.)]|[-*•])\s+/, "")),
+    };
     const result = meeting
       ? await run({ type: "meeting.update", id: meeting._id, data: payload }, { success: "Meeting updated" })
       : await run({ type: "meeting.create", data: payload }, { success: "Meeting scheduled" });
@@ -331,31 +308,48 @@ function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
           <FormFooter
             formId="meeting-form"
             busy={busy}
-            label={meeting ? "Save" : "Schedule"}
+            label={meeting ? "Save changes" : "Schedule"}
             onClose={onClose}
             onDelete={meeting ? () => setConfirming(true) : null}
-            deleteLabel="Delete"
+            deleteLabel="Delete meeting"
           />
         }
       >
-        <form id="meeting-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field label="Title" error={fieldErrors.title}>
-            {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Weekly sync" data-autofocus autoComplete="off" />}
-          </Field>
+        <form id="meeting-form" onSubmit={submit} className="flex flex-col gap-5" noValidate>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Project" error={fieldErrors.projectId}>
-              {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
+            <Field label="Title" error={fieldErrors.title}>
+              {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Weekly sync" data-autofocus autoComplete="off" />}
             </Field>
             <Field label="Starts" error={fieldErrors.startsAt}>
               {(p) => <Input {...p} type="datetime-local" value={values.startsAt} onChange={set("startsAt")} />}
             </Field>
           </div>
+          <Field label="Agenda" error={agendaError}>
+            {(p) => <Textarea {...p} rows={4} value={values.agenda} onChange={set("agenda")} placeholder="What will you cover? One point per line works well." />}
+          </Field>
           <Field label="Call link" hint="Optional: Google Meet, Zoom or any link" error={fieldErrors.callUrl}>
             {(p) => <Input {...p} type="url" inputMode="url" placeholder="https://meet.google.com/…" value={values.callUrl} onChange={set("callUrl")} />}
           </Field>
-          <Field label="Attendees" error={fieldErrors.attendeeIds}>
-            {(p) => <PeoplePicker {...p} users={activeUsers} value={values.attendeeIds} onChange={(attendeeIds) => setValues((v) => ({ ...v, attendeeIds }))} />}
-          </Field>
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] text-secondary">Attendees</span>
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Attendees">
+              {attendees.map((u) => (
+                <PersonChip
+                  key={u._id}
+                  user={u}
+                  label={u._id === currentUserId ? `${firstName(u.name)} (you)` : u.name}
+                  onRemove={() => setValues((v) => ({ ...v, attendeeIds: v.attendeeIds.filter((id) => id !== u._id) }))}
+                  removeLabel={`Remove ${u.name}`}
+                />
+              ))}
+              <PeopleMenu label="Add attendee" people={candidates} onPick={(u) => setValues((v) => ({ ...v, attendeeIds: [...v.attendeeIds, u._id] }))} />
+            </div>
+            {fieldErrors.attendeeIds && (
+              <p className="text-xs text-danger" role="alert">
+                {fieldErrors.attendeeIds}
+              </p>
+            )}
+          </div>
         </form>
       </Dialog>
       <ConfirmDialog
@@ -401,6 +395,124 @@ function InviteForm({ onClose }) {
       <form id="invite-form" onSubmit={submit} noValidate>
         <Field label="Email" error={fieldErrors.email}>
           {(p) => <Input {...p} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" data-autofocus />}
+        </Field>
+      </form>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------------- client
+
+export function ClientDialog({ open, client, onClose, onSaved }) {
+  return open ? <ClientForm key={client?._id ?? "new"} client={client} onClose={onClose} onSaved={onSaved} /> : null;
+}
+
+function ClientForm({ client, onClose, onSaved }) {
+  const { data } = useWorkspace();
+  const { run, busy, fieldErrors } = useAction();
+  const [confirming, setConfirming] = useState(false);
+  const [values, setValues] = useState({ name: client?.name ?? "", description: client?.description ?? "" });
+  const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
+  const projects = client ? data.projects.filter((p) => p.clientId === client._id).length : 0;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const result = client
+      ? await run({ type: "client.update", id: client._id, data: values }, { success: "Client updated" })
+      : await run({ type: "client.create", data: values }, { success: "Client added" });
+    if (result) {
+      onClose();
+      onSaved?.(result);
+    }
+  };
+  const remove = async () => {
+    if (await run({ type: "client.delete", id: client._id }, { success: "Client removed" })) {
+      onClose();
+      onSaved?.(null);
+    }
+  };
+
+  return (
+    <>
+      <Dialog
+        open={!confirming}
+        onClose={onClose}
+        size="sm"
+        title={client ? "Edit client" : "New client"}
+        footer={
+          <FormFooter
+            formId="client-form"
+            busy={busy}
+            label={client ? "Save" : "Add client"}
+            onClose={onClose}
+            onDelete={client && !projects ? () => setConfirming(true) : null}
+            deleteLabel="Remove"
+          />
+        }
+      >
+        <form id="client-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+          <Field label="Name" error={fieldErrors.name}>
+            {(p) => <Input {...p} value={values.name} onChange={set("name")} data-autofocus autoComplete="off" placeholder="Company name" />}
+          </Field>
+          <Field label="Description" hint="One line about who they are" error={fieldErrors.description}>
+            {(p) => <Input {...p} value={values.description} onChange={set("description")} />}
+          </Field>
+          {client && projects > 0 && <p className="text-xs text-faint">To remove this client, move its {pluralize(projects, "project")} to another client or to the company first.</p>}
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={remove}
+        busy={busy}
+        tone="danger"
+        title={`Remove ${client?.name}?`}
+        description="The client is removed for everyone. It has no projects, so nothing else changes."
+        confirmLabel="Remove client"
+      />
+    </>
+  );
+}
+
+// -------------------------------------------------------------------- group
+
+export function GroupDialog({ open, group, onClose }) {
+  return open ? <GroupForm key={group?._id ?? "new"} group={group} onClose={onClose} /> : null;
+}
+
+function GroupForm({ group, onClose }) {
+  const { activeUsers, currentUserId } = useWorkspace();
+  const router = useRouter();
+  const { run, busy, fieldErrors } = useAction();
+  const [values, setValues] = useState({ name: group?.name ?? "", memberIds: group?.memberIds ?? [] });
+  // You're always in a group you start, so you aren't offered when creating one.
+  const people = group ? activeUsers : activeUsers.filter((u) => u._id !== currentUserId);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const result = group
+      ? await run({ type: "group.update", id: group._id, data: values }, { success: "Group updated" })
+      : await run({ type: "group.create", data: values }, { success: "Group created" });
+    if (!result) return;
+    onClose();
+    if (!group) router.push(`/inbox/${result._id}`);
+    else if (!result.memberIds.includes(currentUserId)) router.push("/inbox");
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={group ? "Edit group" : "New group"}
+      description={group ? undefined : "A chat for a project, a team or anything else. Everyone in it can rename it and add people."}
+      footer={<FormFooter formId="group-form" busy={busy} label={group ? "Save" : "Create group"} onClose={onClose} />}
+    >
+      <form id="group-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <Field label="Name" error={fieldErrors.name}>
+          {(p) => <Input {...p} value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} data-autofocus autoComplete="off" placeholder="Design crew" />}
+        </Field>
+        <Field label="People" hint={group ? "Unpick yourself to leave the group" : undefined} error={fieldErrors.memberIds}>
+          {(p) => <PeoplePicker {...p} users={people} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
         </Field>
       </form>
     </Dialog>

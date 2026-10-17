@@ -1,190 +1,169 @@
 "use client";
 
 import Link from "next/link";
-import { Check, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useAction } from "@/lib/client/useAction";
-import { Avatar, cx } from "@/components/ui/primitives";
-import { FORMER_MEMBER, TASK_PRIORITY_LABELS, taskPriority } from "@/lib/constants";
+import { Avatar, AvatarStack, cx, Pill, PillSelect, PriorityPill, STATUS_TONES, StatusIcon } from "@/components/ui/primitives";
+import { FORMER_MEMBER, TASK_STATUS_LABELS, TASK_STATUSES, taskAssigneeIds, taskPriority } from "@/lib/constants";
 import { phaseName } from "@/lib/phases";
-import { firstName, formatDue, formatShortDate, todayISO } from "@/lib/format";
-import { isOverdue } from "@/lib/selectors";
-import { useOpenTask, useTaskAccess, useTaskThreadSummary } from "./taskHooks";
+import { firstName, formatShortDate, todayISO } from "@/lib/format";
+import { isOverdue, projectOwner } from "@/lib/selectors";
+import { useTaskAccess, useTaskThreadSummary } from "./taskHooks";
 
 /*
- * Task list rows: Due · Priority · What · Who · To do · In progress · Done.
- * Each row is its own size container, so in narrow places (an Overview panel, a phone) it switches
- * to a compact layout by itself: priority becomes a dot, and Who moves under the title.
+ * Task table: Task · Assignees · Priority · Due · Status. Each row is its own size container, so in
+ * narrow places (a phone, a project tab) it drops to a compact layout by itself.
  */
 
-const COLUMNS = "@2xl:grid-cols-[84px_100px_minmax(0,1fr)_120px_repeat(3,88px)]";
+const COLUMNS = "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_170px_110px_90px_150px] @3xl:gap-4";
 
-const STATUS_BOXES = [
-  { status: "todo", label: "To do", toast: "Moved to To do" },
-  { status: "doing", label: "In progress", toast: "In progress" },
-  { status: "done", label: "Done", toast: "Task done" },
-];
+const STATUS_TOASTS = { todo: "Moved to To do", doing: "In progress", done: "Task done" };
 
-export const PRIORITY_DOT = { high: "bg-danger", medium: "bg-warning-strong", low: "bg-accent" };
-
-export function PriorityLabel({ priority, compact }) {
+/** Status as a tinted dropdown pill, or a plain pill for people who can't change it. */
+export function TaskStatusSelect({ task, className }) {
+  const { run, busy } = useAction();
+  const { canSetStatus } = useTaskAccess(task);
+  if (!canSetStatus) return <Pill tone={STATUS_TONES[task.status]} className={cx("h-8 px-3.5 text-[13px]", className)}>{TASK_STATUS_LABELS[task.status]}</Pill>;
   return (
-    <span className="flex items-center gap-2">
-      <span aria-hidden className={cx("size-2 shrink-0 rounded-full", PRIORITY_DOT[priority])} />
-      <span className={cx("label-caps text-[11px] text-fg", compact && "sr-only")}>{TASK_PRIORITY_LABELS[priority]}</span>
+    <PillSelect
+      label={`Status of ${task.title}`}
+      value={task.status}
+      tone={STATUS_TONES[task.status]}
+      disabled={busy}
+      onChange={(e) => run({ type: "task.update", id: task._id, data: { status: e.target.value } }, { success: STATUS_TOASTS[e.target.value] })}
+      options={TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] }))}
+      className={cx("min-w-[118px]", className)}
+    />
+  );
+}
+
+/** "AA Abdullah", or a stack of avatars with "Abdullah +2". */
+export function Assignees({ task, size = "xs" }) {
+  const { lookup, currentUserId } = useWorkspace();
+  const people = taskAssigneeIds(task).map((id) => lookup.users[id] ?? { _id: id, name: FORMER_MEMBER });
+  if (!people.length) return <span className="text-[13px] text-faint">Unassigned</span>;
+  const name = (u) => (u._id === currentUserId ? "You" : firstName(u.name));
+  return (
+    <span className="flex min-w-0 items-center gap-2" title={people.map((u) => u.name).join(", ")}>
+      {people.length === 1 ? <Avatar user={people[0]} size={size} /> : <AvatarStack users={people} max={3} size={size} />}
+      <span className="truncate text-[13px] text-soft">
+        {name(people[0])}
+        {people.length > 1 && <span className="text-muted"> +{people.length - 1}</span>}
+      </span>
     </span>
   );
 }
 
-/** Column headings, shown above a list of TaskRows where there is room. */
-export function TaskListHead({ className }) {
+/** "Company · Operations", the phase, or nothing ("none") where the list already says both. */
+function useTaskMeta(task, meta) {
+  const { lookup } = useWorkspace();
+  const project = lookup.projects[task.projectId];
+  if (meta === "none") return null;
+  if (meta === "phase") return phaseName(project, task.phase);
+  return [projectOwner(project, lookup.clients).label, project?.name].filter(Boolean).join(" · ");
+}
+
+function CommentCount({ task }) {
+  const thread = useTaskThreadSummary(task._id);
+  if (!thread.count) return null;
   return (
-    <div aria-hidden className={cx("@container", className)}>
-      <div className={cx("label-caps hidden gap-3 px-3 text-[11px] text-faint @2xl:grid", COLUMNS)}>
-        <span>Due</span>
+    <span
+      aria-label={`${thread.count} comments${thread.unread ? `, ${thread.unread} new` : ""}`}
+      className={cx("flex shrink-0 items-center gap-1 text-[12px] tabular-nums", thread.unread ? "font-semibold text-accent" : "text-muted")}
+    >
+      <MessageSquare className="size-3.5" aria-hidden />
+      {thread.count}
+    </span>
+  );
+}
+
+/** Column headings for a TaskTable. */
+function TaskTableHead() {
+  return (
+    <div aria-hidden className="@container">
+      <div className={cx("hidden border-b border-row pb-3 text-[13px] text-muted", COLUMNS)}>
+        <span>Task</span>
+        <span>Assignees</span>
         <span>Priority</span>
-        <span>What</span>
-        <span>Who</span>
-        {STATUS_BOXES.map((box) => (
-          <span key={box.status} className="text-center whitespace-nowrap">
-            {box.label}
-          </span>
-        ))}
+        <span>Due</span>
+        <span>Status</span>
       </div>
     </div>
   );
 }
 
-/** A square status box; the task's current status shows a tick. One per status, like radio buttons. */
-function StatusBox({ checked, onClick, disabled, label }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={onClick}
-      disabled={disabled}
-      title={disabled ? "Only the assignee, this project’s leads or an admin can change this" : label}
-      className={cx(
-        "flex size-8 items-center justify-center rounded-lg border-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 @2xl:size-10",
-        checked ? "border-accent bg-accent-tint text-accent" : "border-line text-transparent enabled:hover:border-secondary"
-      )}
-    >
-      <Check className="size-4 @2xl:size-5" strokeWidth={3} aria-hidden />
-    </button>
-  );
-}
-
-function DueCell({ task, today }) {
-  const done = task.status === "done";
-  const overdue = isOverdue(task, today);
-  const isToday = task.dueDate === today;
-  const sub = !task.dueDate ? null : overdue ? "Overdue" : isToday ? "Today" : formatDue(task.dueDate, today) !== formatShortDate(task.dueDate) ? formatDue(task.dueDate, today) : null;
-  return (
-    <div
-      className={cx(
-        "flex w-[76px] shrink-0 flex-col items-center justify-center self-stretch rounded-lg px-1 py-2 text-center @2xl:w-auto",
-        done ? "bg-selected text-muted" : overdue ? "bg-danger-outline text-danger" : isToday ? "bg-accent-tint text-accent-light" : "bg-selected text-strong"
-      )}
-    >
-      <span className="text-[15px] leading-tight font-bold tabular-nums">{task.dueDate ? formatShortDate(task.dueDate) : "—"}</span>
-      {sub && <span className="mt-0.5 text-[10px] font-semibold tracking-wide uppercase opacity-80">{sub}</span>}
-      {!task.dueDate && <span className="mt-0.5 text-[10px] tracking-wide uppercase opacity-70">No date</span>}
-    </div>
-  );
-}
-
-/**
- * One task. `meta` picks the line under the title: "project" (Project · Phase), "source" (from a
- * meeting) or "full" (both). `who` picks the person in the Who column: "assignee" (who does it) or
- * "assigner" (who created it, for lists of your own tasks).
- */
-export function TaskRow({ task, meta = "full", who: whoShown = "assignee", className }) {
-  const { lookup, currentUserId } = useWorkspace();
-  const { run, busy } = useAction();
-  const openTask = useOpenTask();
-  const { canSetStatus } = useTaskAccess(task);
-  const thread = useTaskThreadSummary(task._id);
+/** One task row. `meta` picks the line under the title: "path" (client · project), "phase" or "none". */
+export function TaskRow({ task, meta = "path" }) {
   const today = todayISO();
   const done = task.status === "done";
-  const priority = taskPriority(task);
-  const project = lookup.projects[task.projectId];
-  const meeting = task.meetingId ? lookup.meetings[task.meetingId] : null;
-  const personId = whoShown === "assigner" ? task.createdBy : task.assigneeId;
-  const person = lookup.users[personId];
-  const who = personId === currentUserId ? "You" : firstName(person?.name ?? FORMER_MEMBER);
-  const whoLabel = whoShown === "assigner" ? `Assigned by ${who === "You" ? "you" : who}` : who;
-
-  const setStatus = (box) => box.status !== task.status && run({ type: "task.update", id: task._id, data: { status: box.status } }, { success: box.toast });
-
-  const metaParts = [];
-  if (meta !== "source" && project) metaParts.push(`${project.name} · ${phaseName(project, task.phase)}`);
-  const source = meeting && meta !== "project" && (
-    <Link href={`/meetings/${meeting._id}`} className="text-accent hover:text-accent-light">
-      from {meeting.title}, {formatShortDate(meeting.startsAt.slice(0, 10))}
-    </Link>
-  );
+  const overdue = isOverdue(task, today);
+  const subtitle = useTaskMeta(task, meta);
 
   return (
-    <div className={cx("@container border-b border-row last:border-b-0", className)}>
-      <div className={cx("flex items-center gap-3 px-3 py-2.5 @2xl:grid", COLUMNS)}>
-        <DueCell task={task} today={today} />
-
-        <div className="hidden @2xl:block">
-          <PriorityLabel priority={priority} />
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="@2xl:hidden">
-              <PriorityLabel priority={priority} compact />
+    <div className="@container border-b border-row last:border-b-0">
+      <div className={cx("relative flex items-center gap-3 py-4 @3xl:items-center", COLUMNS)}>
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <StatusIcon status={task.status} className="mt-0.5" />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
+              <Link href={`/tasks/${task._id}`} className={cx("truncate text-[15px] font-medium hover:underline hover:underline-offset-4", done ? "text-secondary" : "text-strong")}>
+                {task.title}
+              </Link>
+              <CommentCount task={task} />
             </span>
-            <button type="button" onClick={() => openTask(task)} className={cx("min-w-0 truncate text-left font-medium hover:text-strong", done && "text-muted line-through")}>
-              {task.title}
-            </button>
-            <Link
-              href={`/tasks/${task._id}`}
-              aria-label={`Open task and discussion: ${thread.count} comments${thread.unread ? `, ${thread.unread} new` : ""}`}
-              className={cx(
-                "flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-[12px] tabular-nums hover:bg-hover",
-                thread.unread ? "font-semibold text-accent" : thread.count ? "text-secondary hover:text-fg" : "text-faint hover:text-fg"
-              )}
-            >
-              <MessageSquare className="size-3.5" aria-hidden />
-              {thread.count > 0 && thread.count}
-            </Link>
+            {subtitle && <span className="truncate text-[13px] text-muted">{subtitle}</span>}
+            <span className="flex flex-wrap items-center gap-2 pt-1 @3xl:hidden">
+              <PriorityPill priority={taskPriority(task)} />
+              {task.dueDate && <span className={cx("text-xs", overdue ? "font-medium text-danger" : "text-muted")}>Due {formatShortDate(task.dueDate)}</span>}
+            </span>
           </div>
-          {(metaParts.length > 0 || source) && (
-            <div className="truncate text-xs text-muted">
-              {metaParts.join(" · ")}
-              {source && (
-                <>
-                  {metaParts.length > 0 && " · "}
-                  {source}
-                </>
-              )}
-            </div>
-          )}
-          <span className="text-xs text-secondary @2xl:hidden">
-            {whoLabel} · {STATUS_BOXES.find((b) => b.status === task.status)?.label}
-          </span>
         </div>
-
-        <div className="hidden min-w-0 items-center gap-2 @2xl:flex" title={whoLabel}>
-          <Avatar user={person} size="sm" />
-          <span className="truncate text-[13px] text-secondary">{who}</span>
+        <div className="hidden min-w-0 @3xl:block">
+          <Assignees task={task} />
         </div>
-
-        {/* "contents" lets the three boxes fill the last three grid columns on wide rows. */}
-        <div role="radiogroup" aria-label={`Status of ${task.title}`} className="flex shrink-0 gap-1.5 @2xl:contents">
-          {STATUS_BOXES.map((box) => (
-            <div key={box.status} className="flex justify-center">
-              <StatusBox checked={task.status === box.status} onClick={() => setStatus(box)} disabled={!canSetStatus || busy} label={box.label} />
-            </div>
-          ))}
+        <div className="hidden @3xl:block">
+          <PriorityPill priority={taskPriority(task)} />
+        </div>
+        <span className={cx("hidden text-[13px] @3xl:block", overdue ? "font-medium text-danger" : task.dueDate ? "text-soft" : "text-faint")}>
+          {task.dueDate ? formatShortDate(task.dueDate) : "—"}
+        </span>
+        <div className="shrink-0">
+          <TaskStatusSelect task={task} />
         </div>
       </div>
     </div>
+  );
+}
+
+/** A card holding a task table. */
+export function TaskTable({ tasks, meta, className }) {
+  return (
+    <div className={cx("rounded-[22px] border border-card-line bg-card px-6 pt-5 pb-2", className)}>
+      <TaskTableHead />
+      {tasks.map((t) => (
+        <TaskRow key={t._id} task={t} meta={meta} />
+      ))}
+    </div>
+  );
+}
+
+/** Compact task on a raised tile, for the Overview: status, title, where and when, priority. */
+export function TaskTile({ task }) {
+  const today = todayISO();
+  const subtitle = useTaskMeta(task, "path");
+  const overdue = isOverdue(task, today);
+  return (
+    <Link href={`/tasks/${task._id}`} className="flex items-center gap-3.5 rounded-2xl bg-raised px-4 py-3 transition-colors hover:bg-hover">
+      <StatusIcon status={task.status} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[15px] font-medium text-strong">{task.title}</span>
+        <span className="truncate text-[13px] text-muted">
+          {subtitle}
+          {task.dueDate && <span className={cx(overdue && "font-medium text-danger")}> · {overdue ? "overdue since" : "due"} {formatShortDate(task.dueDate)}</span>}
+        </span>
+      </span>
+      <PriorityPill priority={taskPriority(task)} />
+    </Link>
   );
 }
