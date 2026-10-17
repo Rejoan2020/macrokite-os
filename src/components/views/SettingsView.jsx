@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Avatar, Button, Card, Page, PageHeader, Pill, Switch, TabGroup } from "@/components/ui/primitives";
-import { SignOutButton } from "@/components/shell/AccountScreens";
+import { Avatar, Button, Card, cx, Page, Switch, TabGroup } from "@/components/ui/primitives";
 import { useTheme } from "@/lib/client/theme";
 import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/form";
@@ -13,21 +12,23 @@ import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_PREFS } from "@/lib/constants"
 
 function SectionHead({ id, title, hint, children }) {
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <div className="flex flex-col gap-1">
-        <h2 id={id} className="text-lg font-medium text-strong">
+    <div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2 id={id} className="text-lg font-medium tracking-[-0.02em] text-strong">
           {title}
         </h2>
-        {hint && <p className="text-[13px] text-muted">{hint}</p>}
+        {children}
       </div>
-      {children}
+      {hint && <p className="mt-1.5 text-[13px] text-secondary">{hint}</p>}
     </div>
   );
 }
 
+const panel = "px-7 py-[26px]";
+
 export function SettingsView() {
   const { data, currentUser, isAdmin, mode } = useWorkspace();
-  const toast = useToast();
+
   const { run, busy, fieldErrors } = useAction();
   const initial = {
     name: currentUser.name,
@@ -52,17 +53,16 @@ export function SettingsView() {
     }
     setFailed(null);
     setEditingPhoto(false);
-    toast.success("Changes saved");
   };
 
   return (
-    <Page width="sm">
-      <PageHeader title="Settings" actions={mode === "database" && <SignOutButton className="h-11 rounded-full border border-line px-5 hover:bg-hover" />} />
+    <Page width="sm" className="gap-0">
+      <h1 className="mb-7 text-[32px] leading-[1.1] font-normal tracking-[-0.035em] text-strong sm:text-[38px]">Settings</h1>
 
-      <form onSubmit={save} className="flex flex-col gap-6" noValidate>
-        <Card as="section" aria-labelledby="s-profile" className="flex flex-col gap-5 p-6">
+      <form onSubmit={save} className="flex flex-col gap-[18px]" noValidate>
+        <Card as="section" aria-labelledby="s-profile" className={panel}>
           <SectionHead id="s-profile" title="Profile" hint="How you appear to the team" />
-          <div className="flex flex-wrap items-center gap-3.5">
+          <div className="mt-5 mb-[26px] flex flex-wrap items-center gap-3.5">
             <Avatar user={{ ...currentUser, avatarUrl: values.avatarUrl }} size="lg" />
             {editingPhoto ? (
               <Field error={errors("profile").avatarUrl} className="min-w-60 flex-1">
@@ -79,12 +79,12 @@ export function SettingsView() {
                 )}
               </Field>
             ) : (
-              <Button variant="outline" size="sm" className="h-11 px-5" onClick={() => setEditingPhoto(true)}>
+              <Button onClick={() => setEditingPhoto(true)}>
                 Change photo
               </Button>
             )}
           </div>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3.5">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <Field label="Name" error={errors("profile").name}>
               {(p) => <Input {...p} value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} autoComplete="name" />}
             </Field>
@@ -96,13 +96,13 @@ export function SettingsView() {
 
         <Appearance />
 
-        <Card as="section" aria-labelledby="s-notify" className="flex flex-col gap-3.5 p-6">
+        <Card as="section" aria-labelledby="s-notify" className={panel}>
           <SectionHead id="s-notify" title="Email notifications" hint="In-app notifications are always on" />
-          {NOTIFICATION_PREFS.map((pref) => (
-            <div key={pref.key} className="flex min-h-11 items-center justify-between gap-4 border-t border-row pt-3.5">
-              <span className="flex flex-col gap-0.5">
-                <span className="font-medium text-strong">{pref.label}</span>
-                <span className="text-xs text-muted">{pref.hint}</span>
+          {NOTIFICATION_PREFS.map((pref, i) => (
+            <div key={pref.key} className={cx("flex items-center justify-between gap-4 border-t border-row pt-4", i === 0 && "mt-5", i === NOTIFICATION_PREFS.length - 1 ? "pb-0" : "pb-3.5")}>
+              <span>
+                <span className="block text-sm font-medium text-strong">{pref.label}</span>
+                <span className="mt-1 block text-xs text-faint">{pref.hint}</span>
               </span>
               <Switch
                 label={pref.label}
@@ -114,17 +114,15 @@ export function SettingsView() {
         </Card>
 
         {isAdmin && (
-          <Card as="section" aria-labelledby="s-workspace" className="flex flex-col gap-4 p-6">
-            <SectionHead id="s-workspace" title="Workspace">
-              <Pill>Admins only</Pill>
-            </SectionHead>
-            <Field label="Workspace name" error={errors("workspace").name}>
+          <Card as="section" aria-labelledby="s-workspace" className={panel}>
+            <SectionHead id="s-workspace" title="Workspace" hint="Only admins see this" />
+            <Field label="Workspace name" error={errors("workspace").name} className="mt-5">
               {(p) => <Input {...p} value={values.workspaceName} onChange={(e) => setValues((v) => ({ ...v, workspaceName: e.target.value }))} />}
             </Field>
           </Card>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="flex justify-end">
           <Button variant="primary" type="submit" loading={busy} disabled={!dirty}>
             Save changes
           </Button>
@@ -140,7 +138,7 @@ export function SettingsView() {
 function Appearance() {
   const { preference, setPreference } = useTheme();
   return (
-    <Card as="section" aria-labelledby="s-appearance" className="flex flex-wrap items-center justify-between gap-4 p-6">
+    <Card as="section" aria-labelledby="s-appearance" className={cx(panel, "flex flex-wrap items-center justify-between gap-4")}>
       <SectionHead id="s-appearance" title="Appearance" hint="Applies straight away on this device" />
       <TabGroup
         role="group"
@@ -162,11 +160,11 @@ function DemoData() {
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
   return (
-    <section aria-label="Demo data" className="flex flex-wrap items-center justify-between gap-3 border-t border-row pt-5 text-[13px] text-muted">
+    <section aria-label="Demo data" className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-row pt-5 text-[13px] text-faint">
       <p className="max-w-md">
         Demo mode: there’s no sign-in and everything is saved in this browser only. Set <code className="font-mono text-secondary">MONGODB_URI</code> to use a database.
       </p>
-      <Button variant="quiet" size="sm" onClick={() => setConfirming(true)}>
+      <Button onClick={() => setConfirming(true)}>
         Reset demo data
       </Button>
       <ConfirmDialog

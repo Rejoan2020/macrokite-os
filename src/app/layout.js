@@ -1,13 +1,12 @@
 import { Suspense } from "react";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { AppShell } from "@/components/shell/AppShell";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
 
 export const metadata = {
   title: { default: "Macrokite OS", template: "%s · Macrokite OS" },
@@ -16,15 +15,15 @@ export const metadata = {
 
 export const viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0e0f11" },
-    { media: "(prefers-color-scheme: light)", color: "#f2f2f3" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e1014" },
+    { media: "(prefers-color-scheme: light)", color: "#e7e9ee" },
   ],
 };
 
 export default function RootLayout({ children }) {
   return (
     // The theme script sets data-theme before React hydrates, so the attribute may differ.
-    <html lang="en" data-theme="dark" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" className={`${inter.variable} antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

@@ -9,18 +9,18 @@ import { TaskTable } from "@/components/tasks/TaskRow";
 import { useTaskManagement } from "@/components/tasks/taskHooks";
 import { ActionMenu } from "@/components/ui/ActionMenu";
 import { ConfirmDialog } from "@/components/ui/Dialog";
-import { Avatar, Breadcrumbs, Button, cx, EmptyNote, OnHoldPill, Page, Pill } from "@/components/ui/primitives";
+import { Avatar, Breadcrumbs, Button, cx, EmptyNote, EmptyState, OnHoldPill, Page, Pill } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
 import { formatShortDate, todayISO } from "@/lib/format";
 import { canManageProject } from "@/lib/permissions";
-import { isPastDeadline, projectTrail, sortForList } from "@/lib/selectors";
+import { isPastDeadline, projectTrail } from "@/lib/selectors";
 
 /** One labelled fact in the project's details card: Deadline / Nov 5. */
 function Fact({ label, children }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <dt className="text-[13px] text-muted">{label}</dt>
-      <dd className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 text-[15px] font-medium text-strong">{children}</dd>
+    <div className="min-w-0">
+      <dt className="mb-2 text-xs font-medium text-faint">{label}</dt>
+      <dd className="flex min-w-0 flex-wrap items-center gap-x-[18px] gap-y-2">{children}</dd>
     </div>
   );
 }
@@ -43,7 +43,8 @@ export function ProjectDetailView() {
   }
 
   const today = todayISO();
-  const tasks = sortForList(data.tasks.filter((t) => t.projectId === id));
+  // Open tasks first, in the order they were added; done ones after.
+  const tasks = data.tasks.filter((t) => t.projectId === id).sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
   const members = project.memberIds.map((uid) => lookup.users[uid]).filter(Boolean);
   const manageProject = canManageProject(project, currentUser);
   const late = isPastDeadline(project, today) && !project.archived;
@@ -53,19 +54,19 @@ export function ProjectDetailView() {
   };
 
   return (
-    <Page>
-      <header className="flex flex-col gap-2">
-        <Breadcrumbs items={projectTrail(project, lookup.clients)} />
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-1.5">
+    <Page className="gap-0">
+      <header>
+        <Breadcrumbs items={projectTrail(project, lookup.clients)} className="mb-2" />
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-[32px] leading-tight font-medium tracking-[-0.025em] text-strong sm:text-[38px]">{project.name}</h1>
+              <h1 className="text-[32px] leading-[1.1] font-normal tracking-[-0.035em] text-strong sm:text-[38px]">{project.name}</h1>
               {project.onHold && <OnHoldPill />}
               {project.archived && <Pill tone="neutral">Archived</Pill>}
             </div>
-            {project.description && <p className="max-w-[760px] text-[15px] text-secondary">{project.description}</p>}
+            <p className="mt-2 text-sm text-secondary">{project.description || "No description"}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2.5">
             {manageProject && (
               <ActionMenu
                 label="Project actions"
@@ -83,7 +84,7 @@ export function ProjectDetailView() {
               />
             )}
             {manageProject && (
-              <Button variant="outline" icon={Pencil} onClick={() => overlays.editProject(id)}>
+              <Button size="lg" icon={Pencil} onClick={() => overlays.editProject(id)}>
                 Edit
               </Button>
             )}
@@ -96,36 +97,39 @@ export function ProjectDetailView() {
         </div>
       </header>
 
-      <dl className="flex flex-wrap gap-x-16 gap-y-5 rounded-[22px] border border-card-line bg-card px-6 py-6">
+      <dl className="mt-[26px] mb-[18px] grid grid-cols-1 items-start gap-6 rounded-[24px] border border-card-line bg-card px-[26px] py-6 sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-16">
         <Fact label="Deadline">
-          <span className={cx(late && "text-danger", !project.deadline && "font-normal text-muted")}>{project.deadline ? formatShortDate(project.deadline) : "No deadline"}</span>
+          <span className={cx("text-[13px] font-medium", late ? "text-danger" : "text-fg")}>{project.deadline ? formatShortDate(project.deadline) : "No deadline"}</span>
         </Fact>
         <Fact label="Team">
           {members.length ? (
             members.map((u) => (
-              <span key={u._id} className="flex items-center gap-2.5">
-                <Avatar user={u} size="sm" />
+              <span key={u._id} className="inline-flex items-center gap-2 text-[13px] font-medium text-fg">
+                <Avatar user={u} size="team" />
                 {u.name}
               </span>
             ))
           ) : (
-            <span className="font-normal text-muted">No one yet</span>
+            <span className="text-[13px] font-medium text-faint">No one yet</span>
           )}
         </Fact>
       </dl>
 
       {tasks.length ? (
-        <TaskTable tasks={tasks} meta="none" />
+        <TaskTable tasks={tasks} meta="none" className="mb-7" />
       ) : (
-        <div className="flex flex-col items-center gap-3 rounded-[22px] border border-dashed border-dash px-6 py-12 text-center">
-          <p className="font-medium text-fg">No tasks yet</p>
-          <p className="max-w-[420px] text-[13px] text-muted">{canManage(project) ? "Add the first task for this project." : "This project’s leads add tasks here."}</p>
-          {canManage(project) && (
-            <Button variant="primary" size="sm" icon={Plus} onClick={() => overlays.newTask({ projectId: id })}>
-              New task
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          title="No tasks yet"
+          action={
+            canManage(project) && (
+              <Button variant="primary" icon={Plus} onClick={() => overlays.newTask({ projectId: id })}>
+                New task
+              </Button>
+            )
+          }
+        >
+          {canManage(project) ? `Break ${project.name} into tasks. Each task gets its own chat.` : "This project’s leads add tasks here."}
+        </EmptyState>
       )}
 
       <ConfirmDialog

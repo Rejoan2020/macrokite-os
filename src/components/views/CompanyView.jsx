@@ -2,224 +2,272 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { MessageCircle, Plus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { ProjectsPanel } from "@/components/projects/ProjectsPanel";
-import { Avatar, Button, Page, PageHeader, Pill, Summary, TextLink } from "@/components/ui/primitives";
-import { ConfirmDialog } from "@/components/ui/Dialog";
+import { Avatar, Button, cx, fullHeightPage, PageHeader } from "@/components/ui/primitives";
+import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
 import { announceInvite, useAction } from "@/lib/client/useAction";
 import { ROLES, ROLE_LABELS } from "@/lib/constants";
-import { formatDaysAgo, pluralize } from "@/lib/format";
+import { firstName, formatDaysAgo } from "@/lib/format";
+import { isAssignedTo, isOpenTask, projectOwner } from "@/lib/selectors";
 
-/** The company's own projects (those without a client), and the team. */
+/** The company's own projects (those without a client), with the team beside them. */
 export function CompanyView() {
   const { data } = useWorkspace();
   const projects = data.projects.filter((p) => !p.clientId);
   return (
-    <Page>
-      <PageHeader eyebrow={data.org.name} title="Company" />
-      <ProjectsPanel projects={projects} emptyText="No company projects yet. Internal work like hiring, operations and tooling goes here." />
-      <TeamPanel />
-    </Page>
+    <div className={fullHeightPage}>
+      <PageHeader title="Company" />
+      <div className="mt-[18px] flex min-h-0 flex-1 flex-col gap-[14px] lg:flex-row">
+        <ProjectsPanel projects={projects} ownerLabel="the company" showCount={false} className="flex-1 lg:overflow-y-auto" />
+        <TeamPanel />
+      </div>
+    </div>
   );
 }
-
-const GRID = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.6fr)_150px] items-center gap-4";
 
 function TeamPanel() {
   const { data, currentUserId, isAdmin } = useWorkspace();
   const overlays = useOverlays();
-  const { run, busy } = useAction();
+  const { run } = useAction();
   const toast = useToast();
-  const [removing, setRemoving] = useState(null);
-  const [deleting, setDeleting] = useState(null);
+  const [openId, setOpenId] = useState(null);
 
   const active = data.users.filter((u) => u.active).sort((a, b) => Number(b._id === currentUserId) - Number(a._id === currentUserId) || a.name.localeCompare(b.name));
-  const inactive = data.users.filter((u) => !u.active && !u.deletedAt);
+  const removed = data.users.filter((u) => !u.active && !u.deletedAt);
   const pending = data.invites.filter((i) => !i.acceptedAt);
-  const workingOn = (userId) =>
-    data.projects
-      .filter((p) => !p.archived && p.memberIds.includes(userId))
-      .sort((a, b) => Number(a.isInternal) - Number(b.isInternal) || a.name.localeCompare(b.name))
-      .map((p) => p.name)
-      .join(", ");
-
-  const remove = async () => {
-    if (await run({ type: "member.active", id: removing._id, data: { active: false } }, { success: `${removing.name} removed`, successDescription: "Their history stays in place." })) setRemoving(null);
-  };
-  const deleteMember = async () => {
-    if (await run({ type: "member.delete", id: deleting._id }, { success: `${deleting.name} deleted`, successDescription: "Their history now shows “Former member”." })) setDeleting(null);
-  };
 
   return (
-    <section aria-labelledby="team-title" className="flex flex-col gap-4 rounded-[22px] border border-card-line bg-card px-6 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h2 id="team-title" className="text-xl font-medium text-strong">
-            Team
-          </h2>
-          <p className="text-[13px] text-muted">
-            <Summary parts={[pluralize(active.length, "member"), pending.length > 0 && pluralize(pending.length, "pending invite")]} />
-          </p>
-        </div>
+    <aside aria-labelledby="team-title" className="flex w-full shrink-0 flex-col rounded-[24px] border border-card-line bg-card px-5 py-[22px] lg:w-[clamp(300px,30%,380px)] lg:overflow-y-auto">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h2 id="team-title" className="text-lg font-medium tracking-[-0.02em] text-strong">
+          Team
+        </h2>
         {isAdmin && (
-          <Button variant="primary" icon={Plus} onClick={overlays.invite}>
-            Invite member
+          <Button size="sm" icon={Plus} onClick={overlays.invite}>
+            Invite
           </Button>
         )}
       </div>
 
-      <div className="-mx-2 overflow-x-auto">
-        <div className="min-w-[680px] px-2">
-          <div className={`${GRID} border-b border-row pb-3 text-[13px] text-muted`}>
-            <span>Member</span>
-            <span>Role</span>
-            <span>Working on</span>
-            <span />
-          </div>
-
-          {active.map((user) => {
-            const me = user._id === currentUserId;
-            return (
-              <div key={user._id} className={`${GRID} border-b border-row py-3.5 last:border-b-0`}>
-                <div className="flex min-w-0 items-center gap-3">
-                  <Avatar user={user} />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate font-medium text-strong">
-                      {user.name} {me && <span className="font-normal text-muted">(you)</span>}
-                    </span>
-                    <span className="truncate text-xs text-muted">{user.email}</span>
-                  </div>
-                </div>
-                {isAdmin && !me ? (
-                  <label className="flex">
-                    <span className="sr-only">Role for {user.name}</span>
-                    <select
-                      value={user.role}
-                      onChange={(e) => run({ type: "member.role", id: user._id, data: { role: e.target.value } }, { success: `${user.name} is now ${ROLE_LABELS[e.target.value].toLowerCase()}` })}
-                      className="h-9 cursor-pointer rounded-full border border-line bg-transparent px-3 text-[13px] text-fg outline-none focus:border-accent/60"
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r} className="bg-card">
-                          {ROLE_LABELS[r]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : (
-                  <Pill tone={user.role === "admin" ? "accent" : "neutral"} className="justify-self-start">
-                    {ROLE_LABELS[user.role]}
-                  </Pill>
-                )}
-                <span className="truncate text-secondary">{workingOn(user._id) || "—"}</span>
-                <span className="flex items-center justify-end gap-3">
-                  {!me && <TextLink href={`/inbox/${user._id}`}>Message</TextLink>}
-                  {isAdmin && !me && (
-                    <button type="button" onClick={() => setRemoving(user)} className="text-[13px] text-muted hover:text-danger">
-                      Remove
-                    </button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
-
-          {pending.map((invite) => (
-            <div key={invite._id} className={`${GRID} border-t border-row py-3.5`}>
-              <div className="flex min-w-0 items-center gap-3">
-                <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-dash text-sm text-muted">
-                  @
-                </span>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate font-medium text-secondary">{invite.email}</span>
-                  <span className="text-xs text-muted">Invited {formatDaysAgo(invite.sentAt)}</span>
-                </div>
-              </div>
-              <Pill tone="warning" className="justify-self-start">
-                Pending
-              </Pill>
-              <span className="text-faint">—</span>
-              <span className="flex items-center justify-end gap-2">
-                {isAdmin && (
-                  <>
-                    <button type="button" onClick={() => run({ type: "invite.cancel", id: invite._id }, { success: "Invite cancelled" })} className="text-[13px] text-muted hover:text-danger">
-                      Cancel
-                    </button>
-                    <Button
-                      variant="quiet"
-                      size="sm"
-                      onClick={async () => {
-                        const resent = await run({ type: "invite.resend", id: invite._id });
-                        if (resent) announceInvite(toast, resent, "Invite resent");
-                      }}
-                    >
-                      Resend
-                    </Button>
-                  </>
-                )}
+      <ul className="flex flex-col gap-1">
+        {active.map((user) => (
+          <li key={user._id} className="flex items-center gap-2 rounded-[14px] p-1 hover:bg-raised">
+            <button type="button" onClick={() => setOpenId(user._id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
+              <Avatar user={user} size="row" />
+              <span className="min-w-0 truncate text-sm font-semibold text-strong">
+                {user.name}
+                {user._id === currentUserId && <em className="font-normal text-faint not-italic"> (you)</em>}
               </span>
+            </button>
+            {user._id !== currentUserId && (
+              <Link
+                href={`/inbox/${user._id}`}
+                aria-label={`Message ${firstName(user.name)}`}
+                title={`Message ${firstName(user.name)}`}
+                className="inline-flex size-[34px] shrink-0 items-center justify-center rounded-full border border-row text-secondary hover:bg-input hover:text-fg"
+              >
+                <MessageCircle className="size-[15px]" strokeWidth={1.8} aria-hidden />
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {pending.length > 0 && (
+        <div className="mt-4 flex flex-col gap-1 border-t border-row pt-3">
+          <p className="px-1.5 pb-1 text-xs font-medium text-faint">Invited</p>
+          {pending.map((invite) => (
+            <div key={invite._id} className="flex items-center gap-3 rounded-[14px] px-2.5 py-2">
+              <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-dash text-sm text-faint">
+                @
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-[13px] font-medium text-secondary">{invite.email}</span>
+                <span className="text-[11px] text-faint">Invited {formatDaysAgo(invite.sentAt)}</span>
+              </span>
+              {isAdmin && (
+                <span className="flex shrink-0 flex-col items-end gap-0.5 text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const resent = await run({ type: "invite.resend", id: invite._id });
+                      if (resent) announceInvite(toast, resent, "Invite resent");
+                    }}
+                    className="text-secondary hover:text-fg"
+                  >
+                    Resend
+                  </button>
+                  <button type="button" onClick={() => run({ type: "invite.cancel", id: invite._id }, { success: "Invite cancelled" })} className="text-faint hover:text-danger">
+                    Cancel
+                  </button>
+                </span>
+              )}
             </div>
           ))}
         </div>
-      </div>
-
-      {inactive.length > 0 && (
-        <details className="group text-[13px] text-muted">
-          <summary className="cursor-pointer list-none hover:text-fg">
-            <span aria-hidden className="mr-1.5 inline-block transition-transform group-open:rotate-90">
-              ▸
-            </span>
-            {pluralize(inactive.length, "removed member")}
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1 pl-5">
-            {inactive.map((user) => (
-              <li key={user._id} className="flex items-center gap-3">
-                <span>{user.name}</span>
-                <Link href={`/inbox/${user._id}`} className="text-faint hover:text-fg">
-                  History
-                </Link>
-                {isAdmin && (
-                  <>
-                    <button type="button" onClick={() => run({ type: "member.active", id: user._id, data: { active: true } }, { success: `${user.name} restored` })} className="text-accent hover:text-accent-light">
-                      Restore
-                    </button>
-                    <button type="button" onClick={() => setDeleting(user)} className="text-faint hover:text-danger">
-                      Delete
-                    </button>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </details>
       )}
 
-      <p className="text-[13px] text-muted">
-        Admins invite people and change roles. Removing someone deactivates their account, so their tasks, messages and decisions stay in history. Deleting a removed member erases their profile and shows them as “Former member”.
-      </p>
+      {removed.length > 0 && (
+        <div className="mt-4 flex flex-col gap-1 border-t border-row pt-3">
+          <p className="px-1.5 pb-1 text-xs font-medium text-faint">Removed</p>
+          {removed.map((user) => (
+            <button key={user._id} type="button" onClick={() => setOpenId(user._id)} className="flex items-center gap-3 rounded-[14px] px-2.5 py-2 text-left hover:bg-raised">
+              <Avatar user={user} size="sm" />
+              <span className="truncate text-[13px] text-secondary">{user.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
+      <MemberDialog userId={openId} onClose={() => setOpenId(null)} />
+    </aside>
+  );
+}
+
+/** A team member's card: who they are, what they're on, and (for admins) their role and access. */
+function MemberDialog({ userId, onClose }) {
+  const { data, lookup, currentUserId, isAdmin } = useWorkspace();
+  const { run, busy } = useAction();
+  const [confirm, setConfirm] = useState(null); // "remove" | "delete"
+  const user = userId ? lookup.users[userId] : null;
+  if (!user) return null;
+
+  const me = user._id === currentUserId;
+  const projects = data.projects.filter((p) => !p.archived && p.memberIds.includes(user._id)).sort((a, b) => a.name.localeCompare(b.name));
+  const openTasks = data.tasks.filter((t) => isAssignedTo(t, user._id) && isOpenTask(t)).length;
+
+  const act = async (action, success, description) => {
+    if (await run(action, { success, successDescription: description })) {
+      setConfirm(null);
+      onClose();
+    }
+  };
+  const quiet = "mr-auto";
+
+  return (
+    <>
+      <Dialog
+        open={!confirm}
+        onClose={onClose}
+        title="Team member"
+        footer={
+          <>
+            {isAdmin && !me && user.active && (
+              <Button size="lg" variant="danger" onClick={() => setConfirm("remove")} className={quiet}>
+                Remove from team
+              </Button>
+            )}
+            {isAdmin && !user.active && (
+              <>
+                <Button size="lg" variant="danger" onClick={() => setConfirm("delete")} className={quiet}>
+                  Delete permanently
+                </Button>
+                <Button size="lg" onClick={() => act({ type: "member.active", id: user._id, data: { active: true } }, `${user.name} restored`)} loading={busy}>
+                  Restore
+                </Button>
+              </>
+            )}
+            <Button size="lg" onClick={onClose}>
+              Close
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-[18px]">
+          <div className="flex items-center gap-4">
+            <Avatar user={user} size="lg" />
+            <div className="min-w-0">
+              <div className="truncate text-lg font-semibold tracking-[-0.01em] text-strong">
+                {user.name}
+                {me && <em className="text-sm font-normal text-faint not-italic"> (you)</em>}
+              </div>
+              <div className="mt-0.5 truncate text-[13px] text-secondary">{user.active ? user.email : "Removed from the team"}</div>
+              {isAdmin && user.active && !me ? (
+                <select
+                  aria-label={`Role for ${user.name}`}
+                  value={user.role}
+                  disabled={busy}
+                  onChange={(e) => run({ type: "member.role", id: user._id, data: { role: e.target.value } }, { success: `${user.name} is now ${ROLE_LABELS[e.target.value].toLowerCase()}` })}
+                  className={cx(
+                    "mt-2 h-[22px] cursor-pointer appearance-none rounded-full px-2.5 text-[11px] font-semibold outline-none",
+                    user.role === "admin" ? "bg-accent text-white" : "bg-selected text-secondary"
+                  )}
+                >
+                  {ROLES.map((r) => (
+                    <option key={r} value={r} className="bg-card text-fg">
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className={cx("mt-2 inline-block rounded-full px-2.5 py-1 text-[11px] leading-none font-semibold", user.role === "admin" ? "bg-accent text-white" : "bg-selected text-secondary")}>
+                  {ROLE_LABELS[user.role]}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="flex flex-col gap-0.5 rounded-[14px] bg-raised px-3.5 py-3">
+              <b className="text-[22px] font-medium tracking-[-0.03em] text-strong">{projects.length}</b>
+              <span className="text-xs text-secondary">{projects.length === 1 ? "Project" : "Projects"}</span>
+            </div>
+            <div className="flex flex-col gap-0.5 rounded-[14px] bg-raised px-3.5 py-3">
+              <b className="text-[22px] font-medium tracking-[-0.03em] text-strong">{openTasks}</b>
+              <span className="text-xs text-secondary">{openTasks === 1 ? "Open task" : "Open tasks"}</span>
+            </div>
+          </div>
+
+          <div>
+            <span className="mb-2 block text-xs font-medium text-secondary">Projects</span>
+            {projects.length ? (
+              <div className="flex flex-col gap-1">
+                {projects.map((p) => (
+                  <Link key={p._id} href={`/projects/${p._id}`} onClick={onClose} className="flex justify-between gap-2.5 rounded-xl bg-raised px-3 py-2.5 text-sm font-medium text-fg hover:bg-input">
+                    <span className="truncate">{p.name}</span>
+                    <span className="shrink-0 text-xs font-normal text-faint">{p.clientId ? projectOwner(p, lookup.clients).label : data.org.name}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-[7px] text-xs text-faint">Not on any projects yet.</p>
+            )}
+          </div>
+
+          {!me && user.active && (
+            <Button variant="primary" href={`/inbox/${user._id}`} onClick={onClose} className="w-full">
+              <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+              </svg>
+              Message {firstName(user.name)}
+            </Button>
+          )}
+        </div>
+      </Dialog>
       <ConfirmDialog
-        open={!!removing}
-        onClose={() => setRemoving(null)}
-        onConfirm={remove}
+        open={confirm === "remove"}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => act({ type: "member.active", id: user._id, data: { active: false } }, `${user.name} removed`, "Their history stays in place.")}
         busy={busy}
         tone="danger"
-        title={`Remove ${removing?.name}?`}
+        title={`Remove ${user.name}?`}
         description="Their account is deactivated. Their tasks, messages and decisions stay in history, and an admin can restore them later."
         confirmLabel="Remove"
       />
       <ConfirmDialog
-        open={!!deleting}
-        onClose={() => setDeleting(null)}
-        onConfirm={deleteMember}
+        open={confirm === "delete"}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => act({ type: "member.delete", id: user._id }, `${user.name} deleted`, "Their history now shows “Former member”.")}
         busy={busy}
         tone="danger"
-        title={`Delete ${deleting?.name} permanently?`}
+        title={`Delete ${user.name} permanently?`}
         description="Their name and profile are erased, and their tasks, messages and decisions show “Former member”. If you invite the same email again, their history comes back with their name."
         confirmLabel="Delete"
       />
-    </section>
+    </>
   );
 }

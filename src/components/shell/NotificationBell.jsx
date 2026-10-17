@@ -56,10 +56,10 @@ export function NotificationBell({ align = "left" }) {
         aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={cx("relative flex size-9 items-center justify-center rounded-lg text-secondary hover:bg-hover hover:text-fg", open && "bg-hover text-fg")}
+        className={cx("relative flex size-[34px] items-center justify-center rounded-full border border-row text-secondary hover:bg-input hover:text-fg", open && "bg-input text-fg")}
       >
-        <Bell className="size-[18px]" />
-        <CountBadge count={unread > 99 ? "99+" : unread} className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px]" />
+        <Bell className="size-4" strokeWidth={1.8} />
+        <CountBadge count={unread > 99 ? "99+" : unread} className="absolute -top-[5px] -right-1.5 h-[18px] min-w-[18px] border-2 border-sidebar px-[5px] text-[10px] font-bold" />
       </button>
 
       {open && (
@@ -68,28 +68,30 @@ export function NotificationBell({ align = "left" }) {
           role="dialog"
           aria-label="Notifications"
           className={cx(
-            "absolute top-full z-50 mt-2 flex max-h-[70vh] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-lg",
+            "animate-pop-in absolute top-full z-50 mt-2 flex max-h-[70vh] w-[380px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-[20px] border border-line bg-card",
             align === "right" ? "right-0" : "left-0"
           )}
         >
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <span className="text-[13px] font-semibold text-strong">Notifications</span>
+          <div className="flex items-center justify-between border-b border-row px-[18px] pt-4 pb-3">
+            <span className="text-[15px] font-semibold text-strong">Notifications</span>
             {unread > 0 && (
-              <button type="button" onClick={() => markRead({ type: "notification.readAll" })} className="text-[12px] text-accent hover:text-accent-light">
-                Mark all read
+              <button type="button" onClick={() => markRead({ type: "notification.readAll" })} className="text-[13px] font-medium text-secondary underline decoration-line underline-offset-4 hover:text-fg hover:decoration-current">
+                Mark all as read
               </button>
             )}
           </div>
           {items.length ? (
-            <ul className="overflow-y-auto py-1">
+            <ul className="max-h-[440px] overflow-y-auto p-1.5">
               {items.slice(0, SHOWN).map((n) => (
                 <li key={n._id}>
-                  <button type="button" onClick={() => openItem(n)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-hover">
-                    <Avatar user={lookup.users[n.view.actorId]} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className={cx("block text-[13px]", n.readAt ? "text-secondary" : "font-medium text-strong")}>{n.view.text}</span>
-                      {n.view.detail && <span className="mt-0.5 block truncate text-[12px] text-muted">{n.view.detail}</span>}
-                      <span className="mt-0.5 block text-[11px] text-faint">{formatStamp(n.createdAt)}</span>
+                  <button type="button" onClick={() => openItem(n)} className="relative flex w-full items-start gap-3 rounded-[14px] p-3 text-left hover:bg-raised">
+                    <Avatar user={lookup.users[n.view.actorId]} size="notif" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-[3px] text-[13px] leading-[19px] text-secondary">
+                      <span className={n.readAt ? undefined : "text-fg"}>
+                        <NotificationLine text={n.view.text} name={lookup.users[n.view.actorId]?.name} />
+                      </span>
+                      {n.view.detail && <span className="line-clamp-2 rounded-[4px_10px_10px_10px] bg-input px-2.5 py-1.5 text-xs text-secondary">{n.view.detail}</span>}
+                      <span className="text-[11px] text-faint">{formatStamp(n.createdAt)}</span>
                     </span>
                     {!n.readAt && <span aria-label="Unread" className="mt-1.5 size-2 shrink-0 rounded-full bg-accent" />}
                   </button>
@@ -97,10 +99,27 @@ export function NotificationBell({ align = "left" }) {
               ))}
             </ul>
           ) : (
-            <p className="px-4 py-6 text-center text-[13px] text-muted">No notifications yet. Mentions, messages, task comments, assignments and meeting invites show up here.</p>
+            <p className="px-3 py-[26px] text-center text-[13px] text-faint">You’re all caught up.</p>
           )}
         </div>
       )}
     </div>
   );
+}
+
+/** The notification's sentence with the person's name and anything in quotes in bold. */
+function NotificationLine({ text, name }) {
+  const parts = text.split(/(“[^”]+”)/g);
+  return parts.map((part, i) => {
+    if (/^“.+”$/.test(part)) return <b key={i} className="font-semibold text-fg">{part.slice(1, -1)}</b>;
+    if (i === 0 && name && part.startsWith(name)) {
+      return (
+        <span key={i}>
+          <b className="font-semibold text-fg">{name}</b>
+          {part.slice(name.length)}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
 }

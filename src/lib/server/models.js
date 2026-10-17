@@ -50,7 +50,7 @@ export const Invite = model("Invite", { orgId, email: String, invitedBy: String,
   { email: 1, acceptedAt: 1 },
 ]);
 
-export const Client = model("Client", { orgId, name: String, description: String, createdBy: String, ...timestamps });
+export const Client = model("Client", { orgId, name: String, description: String, memberIds: [String], createdBy: String, ...timestamps });
 
 // A project's own phases, in order. Missing on older projects, which use the standard seven.
 const Phase = new Schema({ _id: String, name: String }, { _id: false });
@@ -132,7 +132,8 @@ export const Conversation = model("Conversation", {
 
 export const Message = model(
   "Message",
-  { orgId, conversationId: { type: String, required: true }, authorId: String, body: String, mentions: [String], editedAt: ref, deletedAt: ref, createdAt: String },
+  // event: a change logged in a task's activity ("changed status from **To do** to **Done**"); body is empty.
+  { orgId, conversationId: { type: String, required: true }, authorId: String, body: String, event: ref, mentions: [String], editedAt: ref, deletedAt: ref, createdAt: String },
   [{ orgId: 1, conversationId: 1, createdAt: 1 }]
 );
 

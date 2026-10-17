@@ -20,7 +20,12 @@ function readPreference() {
 const resolve = (preference) => (preference === "system" ? (media().matches ? "light" : "dark") : preference);
 
 function apply(preference) {
-  document.documentElement.setAttribute("data-theme", resolve(preference));
+  const root = document.documentElement;
+  const theme = resolve(preference);
+  if (root.getAttribute("data-theme") === theme) return;
+  root.classList.add("theme-switching");
+  root.setAttribute("data-theme", theme);
+  requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
 }
 
 const listeners = new Set();

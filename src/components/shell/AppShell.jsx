@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useState } from "react";
-import { BriefcaseBusiness, Building2, CalendarDays, Inbox, LayoutGrid, Menu, Moon, RefreshCw, SquareCheckBig, Sun, X } from "lucide-react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
+import { BriefcaseBusiness, Building2, CalendarDays, Inbox, LayoutGrid, LogOut, Menu, Moon, RefreshCw, Settings2, SquareCheckBig, Sun, X } from "lucide-react";
 import { useBackgroundRefresh, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { OverlayProvider } from "@/components/providers/OverlayProvider";
 import { Avatar, Button, CountBadge, cx, Spinner } from "@/components/ui/primitives";
 import { useTheme } from "@/lib/client/theme";
 import { Logo } from "./Logo";
 import { OnboardingScreen } from "./AccountScreens";
+import { signOutAction } from "@/app/auth/actions";
 import { NotificationBell, useUnreadNotifications } from "./NotificationBell";
 import { useMeetingReminders } from "@/components/meetings/MeetingBits";
 
@@ -112,8 +113,8 @@ function Shell({ children }) {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:rounded-full focus:bg-accent focus:px-4 focus:py-2 focus:text-accent-on">
         Skip to content
       </a>
-      <div className="sticky top-0 hidden h-dvh w-[262px] shrink-0 py-4 pl-4 lg:block">
-        <aside className="h-full rounded-[22px] border border-card-line bg-sidebar">
+      <div className="sticky top-0 hidden h-dvh w-[250px] shrink-0 py-[14px] pl-[14px] lg:block">
+        <aside className="h-full overflow-hidden rounded-[24px] border border-card-line bg-sidebar">
           <Sidebar />
         </aside>
       </div>
@@ -121,7 +122,7 @@ function Shell({ children }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="animate-fade-in absolute inset-0 bg-[var(--overlay)]" onClick={() => setMobileOpen(false)} aria-hidden />
-          <aside className="animate-slide-in absolute inset-y-3 left-3 w-64 max-w-[85vw] rounded-[22px] border border-card-line bg-sidebar" aria-label="Navigation">
+          <aside className="animate-slide-in absolute inset-y-3 left-3 w-[236px] max-w-[85vw] rounded-[24px] border border-card-line bg-sidebar" aria-label="Navigation">
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
@@ -195,14 +196,14 @@ function NavLink({ item, active, counts }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative flex h-11 items-center gap-3 rounded-[14px] px-3 text-[15px] font-medium transition-colors",
-        active ? "bg-hover text-strong" : "text-secondary hover:bg-hover/60 hover:text-fg"
+        "relative flex h-[42px] items-center gap-3 rounded-[14px] px-3 text-sm font-medium transition-colors",
+        active ? "bg-input text-strong" : "text-secondary hover:bg-input hover:text-fg"
       )}
     >
-      {active && <span aria-hidden className="absolute top-1/2 -left-[13px] h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />}
-      <Icon className={cx("size-[18px] shrink-0", active ? "text-accent" : "text-muted")} strokeWidth={1.75} aria-hidden />
+      {active && <span aria-hidden className="absolute inset-y-3 -left-3 w-1 rounded-r bg-accent" />}
+      <Icon className={cx("size-[18px] shrink-0 transition-colors", active ? "text-accent" : "text-faint")} strokeWidth={1.7} aria-hidden />
       <span className="flex-1">{item.label}</span>
-      {item.badge && <CountBadge count={counts[item.badge]} label={`${counts[item.badge]} unread`} className="h-5 min-w-5" />}
+      {item.badge && <CountBadge count={counts[item.badge] > 99 ? "99+" : counts[item.badge]} label={`${counts[item.badge]} unread`} className="ml-auto h-5 min-w-5 px-1.5 font-bold leading-none" />}
     </Link>
   );
 }
@@ -217,9 +218,9 @@ function ThemeButton() {
       onClick={() => setPreference(next)}
       aria-label={`Switch to ${next} theme`}
       title={`Switch to ${next} theme`}
-      className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-raised text-secondary hover:bg-hover hover:text-fg"
+      className="flex w-[52px] shrink-0 items-center justify-center rounded-2xl bg-raised text-secondary transition-colors hover:bg-selected hover:text-fg"
     >
-      <Icon className="size-[18px]" strokeWidth={1.75} aria-hidden />
+      <Icon className="size-4" strokeWidth={1.8} aria-hidden />
     </button>
   );
 }
@@ -231,16 +232,16 @@ function Sidebar({ mobile }) {
   const section = useSection(pathname);
 
   return (
-    <div className="flex h-full flex-col px-3 py-4">
-      <div className="flex items-center gap-2 px-2 pt-1 pb-5">
+    <div className="flex h-full flex-col px-3 pb-[14px]">
+      <div className="flex h-[76px] shrink-0 items-center gap-2.5 px-2">
         <Link href="/" className="flex min-w-0 flex-1 items-center gap-2.5">
           <Logo />
-          <span className="truncate text-base font-semibold text-strong">{data.org.name}</span>
+          <span className="truncate text-[15px] font-bold tracking-[-0.01em] text-strong">{data.org.name}</span>
         </Link>
         {!mobile && <NotificationBell />}
       </div>
 
-      <nav aria-label="Main" className="flex flex-1 flex-col gap-1 overflow-y-auto">
+      <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5">
         {NAV.map((group, i) => (
           <Fragment key={i}>
             {i > 0 && <div className="mx-2 my-3 h-px bg-divider" />}
@@ -251,20 +252,64 @@ function Sidebar({ mobile }) {
         ))}
       </nav>
 
-      <div className="mt-4 flex items-center gap-2">
-        <Link
-          href="/settings"
-          aria-current={pathname === "/settings" ? "page" : undefined}
-          className={cx("flex h-12 min-w-0 flex-1 items-center gap-2.5 rounded-2xl px-2.5 hover:bg-hover", pathname === "/settings" ? "bg-hover" : "bg-raised")}
-        >
-          <Avatar user={currentUser} size="sm" />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold text-strong">{currentUser?.name}</span>
-            <span className="block truncate text-[11px] text-faint">{mode === "demo" ? "Demo data in this browser" : currentUser?.email}</span>
-          </span>
-        </Link>
+      <div className="mt-auto flex items-stretch gap-2">
+        <ProfileMenu user={currentUser} subtitle={mode === "demo" ? "Demo data in this browser" : currentUser?.email} canSignOut={mode === "database"} />
         <ThemeButton />
       </div>
+    </div>
+  );
+}
+
+/** Your profile at the foot of the sidebar; opens a small menu with Settings and Log out. */
+function ProfileMenu({ user, subtitle, canSignOut }) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const wrapRef = useRef(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e) => wrapRef.current && !wrapRef.current.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    wrapRef.current?.querySelector('[role="menuitem"]')?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const item = "flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-left text-sm font-medium outline-none hover:bg-input focus-visible:bg-input";
+  return (
+    <div ref={wrapRef} className="relative min-w-0 flex-1">
+      {open && (
+        <div role="menu" aria-label="Account" className="animate-pop-in absolute right-0 bottom-[calc(100%+8px)] left-0 z-30 flex flex-col gap-0.5 rounded-2xl border border-line bg-card p-1.5">
+          <Link href="/settings" role="menuitem" onClick={() => setOpen(false)} className={cx(item, "text-fg")} aria-current={pathname === "/settings" ? "page" : undefined}>
+            <Settings2 className="size-4 text-secondary" strokeWidth={1.8} aria-hidden />
+            Settings
+          </Link>
+          {canSignOut && (
+            <button type="button" role="menuitem" disabled={pending} onClick={() => startTransition(() => signOutAction())} className={cx(item, "text-danger disabled:opacity-60")}>
+              <LogOut className="size-4" strokeWidth={1.8} aria-hidden />
+              {pending ? "Logging out…" : "Log out"}
+            </button>
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cx("flex w-full min-w-0 items-center gap-2.5 rounded-2xl p-2.5 text-left transition-colors hover:bg-selected", open ? "bg-selected" : "bg-raised")}
+      >
+        <Avatar user={user} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-strong">{user?.name}</span>
+          <span className="block truncate text-[11px] text-faint">{subtitle}</span>
+        </span>
+      </button>
     </div>
   );
 }

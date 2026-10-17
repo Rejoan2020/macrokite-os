@@ -61,7 +61,8 @@ export const projectInput = z.object({
 
 export const clientInput = z.object({
   name: required("Client name", 120),
-  description: text(240).default(""),
+  description: text(2000).default(""),
+  memberIds: ids,
 });
 
 export const groupInput = z.object({

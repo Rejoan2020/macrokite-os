@@ -37,7 +37,7 @@ export function unreadByConversation(data, userId) {
   for (const r of data.readStates) if (r.userId === userId) readAt[r.conversationId] = r.lastReadAt;
   const result = {};
   for (const m of data.messages) {
-    if (m.authorId === userId || m.deletedAt) continue;
+    if (m.authorId === userId || m.deletedAt || m.event) continue;
     const since = readAt[m.conversationId];
     if (since && m.createdAt <= since) continue;
     const entry = (result[m.conversationId] ??= { count: 0, mentioned: false });
@@ -146,4 +146,9 @@ export function sortForList(tasks) {
       (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
       priorityRank(a) - priorityRank(b)
   );
+}
+
+/** Done last, then most urgent first (the prototype's order for task lists). */
+export function sortByPriority(tasks) {
+  return [...tasks].sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || priorityRank(a) - priorityRank(b));
 }

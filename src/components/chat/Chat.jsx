@@ -6,7 +6,7 @@ import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useAction } from "@/lib/client/useAction";
 import { Avatar, Button, cx, DayDivider } from "@/components/ui/primitives";
-import { formatDay, formatTime, todayISO } from "@/lib/format";
+import { firstName, formatDay, formatTime, todayISO } from "@/lib/format";
 import { mentionHandle, mentionSuggestions, socialLinks, tokenize } from "@/lib/text";
 import { canManageTasks } from "@/lib/permissions";
 
@@ -54,11 +54,11 @@ export function MessageText({ body, className }) {
     <p className={cx("leading-[1.55] break-words whitespace-pre-wrap", className)}>
       {tokenize(body, data.users).map((part, i) =>
         part.type === "link" ? (
-          <a key={i} href={part.value} target="_blank" rel="noopener noreferrer" className="text-accent underline-offset-2 hover:text-accent-light hover:underline">
+          <a key={i} href={part.value} target="_blank" rel="noopener noreferrer" className="break-all text-primary underline underline-offset-[3px]">
             {part.value}
           </a>
         ) : part.type === "mention" ? (
-          <span key={i} className="rounded bg-accent-tint px-1 text-accent-light">
+          <span key={i} className="rounded-full bg-accent-tint px-1.5 py-px font-medium text-accent-tint-text">
             {part.value}
           </span>
         ) : (
@@ -71,15 +71,15 @@ export function MessageText({ body, className }) {
 
 const PLATFORM_ICONS = {
   Instagram: (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
       <rect x="3" y="3" width="18" height="18" rx="5" />
       <circle cx="12" cy="12" r="4" />
       <circle cx="17.5" cy="6.5" r="0.6" />
     </svg>
   ),
   Facebook: (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M15 3h-3a4 4 0 0 0-4 4v3H6v4h2v7h4v-7h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
     </svg>
   ),
 };
@@ -105,15 +105,15 @@ export function LinkCards({ body }) {
       href={link.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex max-w-[460px] gap-3.5 rounded-2xl border border-line bg-raised p-3 hover:border-dash"
+      className="mt-0.5 flex w-[420px] max-w-full items-center gap-3.5 rounded-[18px] border border-row bg-card p-3"
     >
-      <span aria-hidden className="flex size-[72px] shrink-0 items-center justify-center rounded-xl bg-hover text-faint">
+      <span aria-hidden className="grid size-16 shrink-0 place-items-center rounded-[14px] bg-info-tint text-info">
         {PLATFORM_ICONS[link.platform]}
       </span>
-      <span className="flex min-w-0 flex-col justify-center gap-1">
-        <span className="text-[11px] font-medium tracking-[0.04em] text-muted uppercase">{link.platform}</span>
-        <span className="truncate font-medium">{postTitle(link.url)}</span>
-        <span className="text-xs text-accent">Open post</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">{link.platform}</span>
+        <span className="mt-[3px] truncate font-semibold text-fg">{postTitle(link.url)}</span>
+        <span className="mt-1.5 text-xs font-medium text-accent">Open post</span>
       </span>
     </a>
   ));
@@ -136,21 +136,42 @@ export function useTaskFromMessage(projectId) {
     });
 }
 
-/** Channel-style messages (General, project chat): avatar, name, time, body. */
+/** "changed status from **To do** to **Done**" with the starred parts in bold. */
+function EventText({ text }) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <b key={i} className="font-semibold text-secondary">{part}</b> : <Fragment key={i}>{part}</Fragment>));
+}
+
+/**
+ * A message: avatar, name, time and the text in a soft bubble. A task's logged changes show as a
+ * quiet line instead ("● You changed status from To do to Done").
+ */
 export function ChannelMessage({ message, onCreateTask }) {
-  const { lookup } = useWorkspace();
+  const { lookup, currentUserId } = useWorkspace();
   const author = lookup.users[message.authorId];
+  if (message.event) {
+    return (
+      <div className="-my-0.5 ml-1 flex items-center gap-2.5 text-xs text-faint">
+        <span aria-hidden className="mr-2.5 ml-3 size-1.5 shrink-0 rounded-full bg-dash" />
+        <span className="min-w-0">
+          <b className="font-semibold text-secondary">{message.authorId === currentUserId ? "You" : firstName(author?.name ?? "Former member")}</b> <EventText text={message.event} />
+        </span>
+        <time dateTime={message.createdAt} className="ml-auto whitespace-nowrap">
+          {formatTime(message.createdAt)}
+        </time>
+      </div>
+    );
+  }
   return (
     <article className="group relative flex gap-3">
-      <Avatar user={author} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <Avatar user={author} size="chat" />
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold">{author?.name ?? "Former member"}</span>
+          <span className="text-sm font-semibold text-fg">{author?.name ?? "Former member"}</span>
           <time dateTime={message.createdAt} className="text-[11px] text-faint">
             {formatTime(message.createdAt)}
           </time>
         </div>
-        <MessageText body={message.body} className="text-body" />
+        <MessageText body={message.body} className="max-w-full rounded-[4px_16px_16px_16px] bg-input px-3.5 py-[9px] text-sm leading-[22px] text-fg" />
         <LinkCards body={message.body} />
       </div>
       {onCreateTask && (
@@ -271,7 +292,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           ))}
         </ul>
       )}
-      <label className={cx("flex items-end gap-2 border border-transparent bg-input focus-within:border-accent/50", compact ? "rounded-[24px] p-1.5 pl-4" : "rounded-[26px] p-2 pl-5")}>
+      <label className={cx("flex items-end gap-2.5 bg-input", compact ? "rounded-[26px] p-1.5 pl-[18px]" : "rounded-[29px] p-1.5 pl-[22px]")}>
         <span className="sr-only">{label}</span>
         <textarea
           ref={ref}
@@ -292,13 +313,13 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open ? `${listId}-${active}` : undefined}
-          className="min-w-0 flex-1 resize-none bg-transparent py-2 leading-normal text-fg outline-none placeholder:text-muted"
+          className="min-w-0 flex-1 resize-none bg-transparent py-2.5 text-sm leading-normal text-fg outline-none placeholder:text-faint"
         />
-        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!body.trim()} className={compact ? "h-10" : ""}>
+        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!body.trim()} className={compact ? "h-10 px-[18px]" : ""}>
           Send
         </Button>
       </label>
-      {hint && <p className="text-xs text-faint">{hint}</p>}
+      {hint && <p className="ml-[22px] text-xs text-faint">{hint}</p>}
     </form>
   );
 }

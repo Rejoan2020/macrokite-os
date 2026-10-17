@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { Bell, BellRing, Check, Copy } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Button, cx, IconButton } from "@/components/ui/primitives";
+import { cx } from "@/components/ui/primitives";
+import { OptionMenu } from "@/components/ui/Menus";
 import { useAction } from "@/lib/client/useAction";
 import { REMINDER_OPTIONS, reminderLabel } from "@/lib/constants";
 import { formatTime } from "@/lib/format";
@@ -21,51 +21,79 @@ export function useNow(intervalMs = 1000) {
 
 const pad = (n) => String(n).padStart(2, "0");
 
-/** "8h 38m 07s" until it starts, "2d 4h" when it's days away, "Now" once it has started. */
+/** Live countdown to a meeting's start, down to the second: "2d 4h 10m 05s", then "Live now" for an hour, then "Ended". */
 export function countdown(startsAt, now) {
   const ms = new Date(startsAt).getTime() - now;
-  if (ms <= 0) return "Now";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86_400);
-  const h = Math.floor((s % 86_400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${pad(m)}m ${pad(s % 60)}s`;
-  return `${m}m ${pad(s % 60)}s`;
+  if (ms <= 0) return ms > -60 * 60_000 ? "Live now" : "Ended";
+  const t = Math.floor(ms / 1000);
+  const d = Math.floor(t / 86_400);
+  const h = Math.floor((t % 86_400) / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  if (d) return `${d}d ${h}h ${pad(m)}m ${pad(s)}s`;
+  if (h) return `${h}h ${pad(m)}m ${pad(s)}s`;
+  return `${m}m ${pad(s)}s`;
 }
 
-/** Live time until a meeting starts, in the accent color. */
 export function Countdown({ startsAt, className }) {
   const now = useNow();
+  const text = countdown(startsAt, now);
   return (
-    <span className={cx("font-semibold text-accent tabular-nums", className)} suppressHydrationWarning>
-      {countdown(startsAt, now)}
+    <span
+      className={cx("text-xs tabular-nums", text === "Live now" ? "font-semibold text-success-text" : text === "Ended" ? "font-medium text-faint" : "font-semibold text-accent-tint-text", className)}
+      suppressHydrationWarning
+    >
+      {text}
     </span>
   );
 }
 
 /** "meet.google.com/abc-defg-hij" without the protocol. */
-export const shortLink = (url) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+export const shortLink = (url) => url.replace(/^https?:\/\//, "");
 
-/** Copies a call link and says so. `labelled` shows "Copy" next to the icon. */
-export function CopyLinkButton({ url, labelled, className }) {
-  const toast = useToast();
-  const copy = async () => {
+const CopyIcon = () => (
+  <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="12" height="12" rx="3" />
+    <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+  </svg>
+);
+
+/** Copies a call link, then says "Copied" for a moment. `compact` is a square icon button. */
+export function CopyLinkButton({ url, compact, className }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     try {
       await navigator.clipboard.writeText(url);
-      toast.success("Link copied");
     } catch {
-      toast.error("Couldn’t copy the link", url);
+      const area = document.createElement("textarea");
+      area.value = url;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   };
-  if (labelled) {
-    return (
-      <Button variant="outline" icon={Copy} onClick={copy} className={className}>
-        Copy
-      </Button>
-    );
-  }
-  return <IconButton icon={Copy} label="Copy call link" outline onClick={copy} className={className} />;
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy link"
+      aria-label={compact ? (copied ? "Copied" : "Copy link") : undefined}
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border text-[13px] font-medium transition-colors duration-150 active:translate-y-px",
+        copied ? "border-transparent bg-success-tint text-success-text" : "border-line bg-card text-fg hover:bg-hover",
+        compact ? "size-9" : "h-9 px-3",
+        className
+      )}
+    >
+      <CopyIcon />
+      {!compact && <span>{copied ? "Copied" : "Copy"}</span>}
+    </button>
+  );
 }
 
 const FIRED_KEY = "macrokite-os:reminders-fired";
@@ -79,14 +107,14 @@ function readFired() {
 }
 
 /**
- * Shows your meeting reminders while the app is open: a toast, and a browser notification when
- * allowed. Each reminder fires once per device (remembered in localStorage), and only inside its
- * window, so opening the app after a meeting has started doesn't fire it late.
+ * Shows your meeting reminders while the app is open: a toast with the meeting's title, its start
+ * time and a Join button, and a browser notification when allowed. Each reminder fires once per
+ * device, from its time until 15 minutes after the start.
  */
 export function useMeetingReminders() {
   const { data, currentUserId } = useWorkspace();
   const toast = useToast();
-  const now = useNow(15_000);
+  const now = useNow(30_000);
 
   useEffect(() => {
     if (!data) return;
@@ -97,13 +125,13 @@ export function useMeetingReminders() {
       if (!minutes || m.endedAt) continue;
       const start = new Date(m.startsAt).getTime();
       const key = `${m._id}:${m.startsAt}:${minutes}`;
-      if (fired[key] || now < start - minutes * 60_000 || now >= start) continue;
+      if (fired[key] || now < start - minutes * 60_000 || now >= start + 15 * 60_000) continue;
       fired[key] = now;
       changed = true;
-      const body = `Starts at ${formatTime(m.startsAt)}${m.callUrl ? ` · ${shortLink(m.callUrl)}` : ""}`;
-      toast.info(`Reminder: ${m.title}`, body);
+      const body = `Starts at ${formatTime(m.startsAt)}`;
+      toast.info(m.title, body, m.callUrl ? { href: m.callUrl, label: "Join" } : undefined);
       try {
-        if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(`Reminder: ${m.title}`, { body });
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification(m.title, { body });
       } catch {
         // The toast is enough.
       }
@@ -121,70 +149,42 @@ export function useMeetingReminders() {
   }, [data, currentUserId, now, toast]);
 }
 
-/** The bell on a meeting card: pick when to be reminded, or turn it off. Your own setting only. */
+const REMIND_OPTIONS = [{ value: 0, label: "Off" }, ...REMINDER_OPTIONS.map((m) => ({ value: m, label: `${reminderLabel(m)} before` }))];
+
+const BellIcon = () => (
+  <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </svg>
+);
+
+/** The bell on a meeting card ("Notify me"): pick when to be reminded, or turn it off. Your own setting only. */
 export function ReminderMenu({ meeting }) {
   const { currentUserId } = useWorkspace();
-  const { run, busy } = useAction();
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-  const menuId = useId();
-  const current = meeting.reminders?.[currentUserId] ?? null;
+  const { run } = useAction();
+  const toast = useToast();
+  const current = meeting.reminders?.[currentUserId] ?? 0;
 
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (e) => wrapRef.current && !wrapRef.current.contains(e.target) && setOpen(false);
-    const onKey = (e) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    wrapRef.current?.querySelector('[role="menuitemradio"][aria-checked="true"]')?.focus();
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const pick = (minutes) => {
-    setOpen(false);
-    if (minutes === current) return;
+  const pick = async (minutes) => {
     // Ask for browser notifications the first time someone turns a reminder on.
     if (minutes && typeof Notification !== "undefined" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
-    run({ type: "meeting.reminder", id: meeting._id, data: { minutes } }, { success: minutes ? `Reminder set: ${reminderLabel(minutes)} before` : "Reminder off" });
+    if (await run({ type: "meeting.reminder", id: meeting._id, data: { minutes: minutes || null } }, { silent: true })) {
+      toast.success(minutes ? `You'll be notified ${reminderLabel(minutes)} before “${meeting.title}”` : `Reminder turned off for “${meeting.title}”`);
+    }
   };
 
-  const label = current ? `Reminder: ${reminderLabel(current)} before` : "Set a reminder";
   return (
-    <div ref={wrapRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        disabled={busy}
-        aria-label={label}
-        title={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        className={cx("inline-flex size-9 items-center justify-center rounded-full border transition-colors hover:bg-hover", current ? "border-accent/40 bg-accent-tint text-accent" : "border-line text-muted hover:text-fg")}
-      >
-        {current ? <BellRing className="size-4" aria-hidden /> : <Bell className="size-4" aria-hidden />}
-      </button>
-      {open && (
-        <div id={menuId} role="menu" aria-label="Remind me" className="absolute top-full right-0 z-30 mt-1.5 w-52 rounded-2xl border border-line bg-card py-1.5 shadow-pop">
-          <p className="px-4 pt-1.5 pb-1 text-xs text-muted">Remind me</p>
-          {[null, ...REMINDER_OPTIONS].map((minutes) => (
-            <button
-              key={minutes ?? "off"}
-              type="button"
-              role="menuitemradio"
-              aria-checked={minutes === current}
-              onClick={() => pick(minutes)}
-              className="mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] text-fg outline-none hover:bg-hover focus-visible:bg-hover"
-            >
-              <Check aria-hidden className={cx("size-4 shrink-0 text-accent", minutes !== current && "invisible")} />
-              {minutes ? `${reminderLabel(minutes)} before` : "Off"}
-            </button>
-          ))}
-        </div>
+    <OptionMenu
+      label="Notify me"
+      title={current ? `Notify me: ${reminderLabel(current)} before` : "Notify me"}
+      value={current}
+      options={REMIND_OPTIONS}
+      onChange={pick}
+      buttonClassName={cx(
+        "inline-flex size-[34px] items-center justify-center rounded-full border transition-colors",
+        current ? "border-transparent bg-accent-tint text-accent-tint-text" : "border-row text-secondary hover:bg-input hover:text-fg"
       )}
-    </div>
+      trigger={() => <BellIcon />}
+    />
   );
 }
