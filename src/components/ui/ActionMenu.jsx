@@ -4,11 +4,28 @@ import { useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { cx } from "./primitives";
 
+/** Icons for menu items, as drawn in the prototype's menus. */
+const ITEM_ICONS = {
+  person: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  group: (
+    <>
+      <circle cx="9" cy="8" r="4" />
+      <path d="M2 21a7 7 0 0 1 14 0" />
+      <path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3" />
+    </>
+  ),
+};
+
 /**
- * A "⋯" button (or another icon) with a short list of actions. Items: [{ label, onClick, tone? }] where
- * tone="danger" colors the item. Closes on pick, outside click or Escape.
+ * A "⋯" button (or another icon) with a short list of actions. Items: [{ label, onClick, tone?, icon? }]
+ * where tone="danger" colors the item. Closes on pick, outside click or Escape.
  */
-export function ActionMenu({ label = "More actions", items, icon: Icon = MoreHorizontal, buttonClassName }) {
+export function ActionMenu({ label = "More actions", items, icon: Icon = MoreHorizontal, buttonClassName, menuClassName }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const buttonRef = useRef(null);
@@ -34,21 +51,22 @@ export function ActionMenu({ label = "More actions", items, icon: Icon = MoreHor
   if (!items.length) return null;
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} className="relative shrink-0">
       <button
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={label}
+        title={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className={buttonClassName ?? cx("flex size-11 items-center justify-center rounded-full border border-line text-secondary hover:bg-hover hover:text-fg", open && "bg-hover text-fg")}
+        className={buttonClassName ?? cx("flex size-[34px] items-center justify-center rounded-full border border-row text-secondary hover:bg-input hover:text-fg", open && "bg-input text-fg")}
       >
-        <Icon className="size-5" aria-hidden />
+        <Icon className="size-4" aria-hidden />
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={label} className="absolute top-full right-0 z-30 mt-1.5 w-52 rounded-2xl border border-line bg-card py-1.5 shadow-pop">
+        <div id={menuId} role="menu" aria-label={label} className={cx("animate-pop-in absolute top-[calc(100%+8px)] right-0 z-30 flex w-52 flex-col gap-0.5 rounded-2xl border border-line bg-card p-1.5", menuClassName)}>
           {items.map((item) => (
             <button
               key={item.label}
@@ -58,8 +76,16 @@ export function ActionMenu({ label = "More actions", items, icon: Icon = MoreHor
                 setOpen(false);
                 item.onClick();
               }}
-              className={cx("mx-1.5 flex w-[calc(100%-12px)] items-center rounded-xl px-2.5 py-2 text-left text-[13px] outline-none hover:bg-hover focus-visible:bg-hover", item.tone === "danger" ? "text-danger" : "text-fg")}
+              className={cx(
+                "flex h-10 items-center gap-2.5 rounded-[10px] px-3 text-left text-sm font-medium outline-none hover:bg-input focus-visible:bg-input",
+                item.tone === "danger" ? "text-accent-tint-text" : "text-fg"
+              )}
             >
+              {item.icon && (
+                <svg aria-hidden width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={item.tone === "danger" ? undefined : "text-secondary"}>
+                  {ITEM_ICONS[item.icon]}
+                </svg>
+              )}
               {item.label}
             </button>
           ))}

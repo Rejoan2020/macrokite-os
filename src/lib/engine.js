@@ -13,12 +13,12 @@ import {
   taskInput,
   workspaceInput,
 } from "./schemas";
-import { FORMER_MEMBER, taskAssigneeIds, taskPriority } from "./constants";
+import { FORMER_MEMBER, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, taskAssigneeIds, taskPriority } from "./constants";
 import { normalizeTask } from "./compat";
 import { DEFAULT_PHASES, nextPhaseIn, phaseName, projectPhases } from "./phases";
 import { parseMentions } from "./text";
 import { conversationMemberIds, readStateId } from "./selectors";
-import { pluralize } from "./format";
+import { formatShortDate, pluralize } from "./format";
 import { canChooseLeads, canCreateProject, canEditPhases, canManageClients, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
 
 /**
@@ -201,6 +201,33 @@ function findItem(list, itemId, label) {
   if (!list.some((i) => i._id === itemId)) throw new DomainError(`${label} not found.`, { status: 404 });
 }
 
+/** The task's discussion, started on first use. */
+function taskThread(tx, task) {
+  return taskThreadFor(tx, task._id) ?? tx.create("conversations", "cnv", { type: "task", projectId: task.projectId, taskId: task._id, memberIds: [], createdAt: tx.now });
+}
+
+/**
+ * Logs what changed on a task in its activity: status, priority, due date, assignees and the
+ * description. **Bold** marks the values. Nobody is notified about these lines.
+ */
+function logTaskChanges(tx, ctx, before, after) {
+  const name = (id) => tx.state.users.find((u) => u._id === id)?.name ?? FORMER_MEMBER;
+  const lines = [];
+  if (before.status !== after.status) lines.push(`changed status from **${TASK_STATUS_LABELS[before.status]}** to **${TASK_STATUS_LABELS[after.status]}**`);
+  if (taskPriority(before) !== taskPriority(after)) lines.push(`set priority to **${TASK_PRIORITY_LABELS[taskPriority(after)]}**`);
+  if ((before.dueDate || "") !== (after.dueDate || "")) lines.push(after.dueDate ? `set the due date to **${formatShortDate(after.dueDate)}**` : "removed the due date");
+  const was = taskAssigneeIds(before);
+  const now = taskAssigneeIds(after);
+  now.filter((id) => !was.includes(id)).forEach((id) => lines.push(`assigned **${name(id)}**`));
+  was.filter((id) => !now.includes(id)).forEach((id) => lines.push(`unassigned **${name(id)}**`));
+  if ((before.description || "") !== (after.description || "")) lines.push("updated the description");
+  if (!lines.length) return;
+  const thread = taskThread(tx, after);
+  for (const event of lines) {
+    tx.create("messages", "msg", { conversationId: thread._id, authorId: ctx.userId, body: "", event, mentions: [], editedAt: null, deletedAt: null, createdAt: tx.now });
+  }
+}
+
 function postMessage(tx, ctx, conversation, body) {
   const members = tx.state.users.filter((u) => conversationMemberIds(conversation, tx.state).includes(u._id) && u.active);
   const mentions = parseMentions(body, members).filter((id) => id !== ctx.userId);
@@ -318,13 +345,15 @@ const handlers = {
   "client.create"(tx, ctx, { data }) {
     if (!canManageClients(tx.me())) throw new DomainError("Only admins can add clients.", { status: 403 });
     const input = parse(clientInput, data);
-    return tx.create("clients", "cli", { ...input, createdBy: ctx.userId, createdAt: tx.now, updatedAt: tx.now });
+    const memberIds = activeUserIds(tx, [...new Set([ctx.userId, ...input.memberIds])], "memberIds");
+    return tx.create("clients", "cli", { ...input, memberIds, createdBy: ctx.userId, createdAt: tx.now, updatedAt: tx.now });
   },
   "client.update"(tx, ctx, { id, data }) {
     if (!canManageClients(tx.me())) throw new DomainError("Only admins can change clients.", { status: 403 });
     const current = tx.find("clients", id, "Client");
-    const input = parse(clientInput, { ...current, ...data });
-    return tx.put("clients", { ...current, ...input, updatedAt: tx.now });
+    const input = parse(clientInput, { memberIds: [], ...current, ...data });
+    const memberIds = activeUserIds(tx, [...new Set([ctx.userId, ...input.memberIds])], "memberIds", current.memberIds ?? []);
+    return tx.put("clients", { ...current, ...input, memberIds, updatedAt: tx.now });
   },
   "client.delete"(tx, ctx, { id }) {
     if (!canManageClients(tx.me())) throw new DomainError("Only admins can remove clients.", { status: 403 });
@@ -382,13 +411,16 @@ const handlers = {
       updatedAt: tx.now,
     });
     task.assigneeIds.filter((userId) => !current.assigneeIds.includes(userId)).forEach((userId) => tx.notify(userId, "assignment", "task", task._id));
+    logTaskChanges(tx, ctx, current, task);
     return task;
   },
   "task.toggle"(tx, ctx, { id, data }) {
     const current = normalizeTask(tx.find("tasks", id, "Task"));
     requireTaskStatus(tx, current);
     const done = Boolean(data?.done);
-    return tx.put("tasks", { ...current, status: done ? "done" : "todo", completedAt: done ? tx.now : null, updatedAt: tx.now });
+    const task = tx.put("tasks", { ...current, status: done ? "done" : "todo", completedAt: done ? tx.now : null, updatedAt: tx.now });
+    logTaskChanges(tx, ctx, current, task);
+    return task;
   },
   "task.delete"(tx, ctx, { id }) {
     requireTaskEdit(tx, tx.find("tasks", id, "Task"));
@@ -412,8 +444,8 @@ const handlers = {
     const task = tx.find("tasks", id, "Task");
     const { body } = parse(messageInput, data);
     const earlier = taskThreadFor(tx, id);
-    const thread = earlier ?? tx.create("conversations", "cnv", { type: "task", projectId: task.projectId, taskId: id, memberIds: [], createdAt: tx.now });
-    const commenters = earlier ? tx.state.messages.filter((m) => m.conversationId === earlier._id).map((m) => m.authorId) : [];
+    const thread = earlier ?? taskThread(tx, task);
+    const commenters = earlier ? tx.state.messages.filter((m) => m.conversationId === earlier._id && !m.event).map((m) => m.authorId) : [];
     const message = postMessage(tx, ctx, thread, body);
     const following = new Set([...taskAssigneeIds(task), task.createdBy, ...commenters]);
     for (const userId of following) {
@@ -562,6 +594,16 @@ const handlers = {
     const memberIds = activeUserIds(tx, input.memberIds, "memberIds", current.memberIds);
     if (!memberIds.length) throw new DomainError("A group needs at least one member.", { fieldErrors: { memberIds: "Pick at least one person" } });
     return tx.put("conversations", { ...current, name: input.name, memberIds });
+  },
+  "group.delete"(tx, ctx, { id }) {
+    const group = tx.find("conversations", id, "Group");
+    if (group.type !== "group" || !group.memberIds.includes(ctx.userId)) throw new DomainError("Group not found.", { status: 404 });
+    const messageIds = new Set(tx.state.messages.filter((m) => m.conversationId === id).map((m) => m._id));
+    tx.remove("notifications", tx.state.notifications.filter((n) => n.targetType === "message" && messageIds.has(n.targetId)).map((n) => n._id));
+    tx.remove("readStates", tx.state.readStates.filter((r) => r.conversationId === id).map((r) => r._id));
+    tx.remove("messages", [...messageIds]);
+    tx.remove("conversations", [id]);
+    return { _id: id };
   },
   "notification.read"(tx, ctx, { id }) {
     const n = tx.find("notifications", id, "Notification");

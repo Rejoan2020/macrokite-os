@@ -602,4 +602,32 @@ test("meeting reminders are per person", () => {
   fails({ type: "meeting.reminder", id: meeting._id, data: { minutes: 7 } }, (e) => assert.ok(e.fieldErrors.minutes));
 });
 
+test("task activity logs changes without notifying anyone", () => {
+  const task = run({ type: "task.create", data: { title: "Logged", projectId: "prj_jajabor", assigneeIds: ["usr_sara"] } });
+  const before = state.notifications.length;
+  run({ type: "task.update", id: task._id, data: { status: "doing", priority: "urgent", dueDate: "2030-01-05", assigneeIds: ["usr_tanvir"], description: "New" } });
+  const thread = state.conversations.find((c) => c.type === "task" && c.taskId === task._id);
+  const events = state.messages.filter((m) => m.conversationId === thread._id).map((m) => m.event);
+  assert.deepEqual(events, [
+    "changed status from **To do** to **In progress**",
+    "set priority to **Urgent**",
+    "set the due date to **Jan 5, 2030**",
+    "assigned **Tanvir Karim**",
+    "unassigned **Sara Rahman**",
+    "updated the description",
+  ]);
+  assert.equal(state.notifications.length, before + 1, "only the new assignee hears about it");
+  assert.equal(unreadByConversation(state, "usr_tanvir")[thread._id], undefined, "events don't count as unread");
+});
+
+test("clients have members, and groups can be deleted", () => {
+  const client = run({ type: "client.create", data: { name: "Members Inc", memberIds: ["usr_sara"] } });
+  assert.deepEqual([...client.memberIds].sort(), ["usr_alex", "usr_sara"], "whoever adds a client is a member");
+  const group = run({ type: "group.create", data: { name: "Temp", memberIds: ["usr_sara"] } });
+  run({ type: "message.create", id: group._id, data: { body: "hi" } });
+  fails({ type: "group.delete", id: group._id }, (e) => assert.equal(e.status, 404), as("usr_tanvir"));
+  run({ type: "group.delete", id: group._id }, as("usr_sara"));
+  assert.ok(!state.conversations.some((c) => c._id === group._id) && !state.messages.some((m) => m.conversationId === group._id));
+});
+
 console.log("\nall engine checks passed");

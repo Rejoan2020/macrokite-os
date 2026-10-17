@@ -50,29 +50,30 @@ export function Dialog({ open, onClose, title, description, children, footer, si
 
   if (!open || typeof document === "undefined") return null;
 
-  const widths = { sm: "sm:max-w-md", md: "sm:max-w-lg" };
+  // Every window is 520px wide, as in the prototype.
+  const widths = { sm: "sm:max-w-[520px]", md: "sm:max-w-[520px]" };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="animate-fade-in absolute inset-0 bg-[var(--overlay)] backdrop-blur-sm" onMouseDown={onClose} aria-hidden />
+      <div className="animate-fade-in absolute inset-0 bg-[var(--overlay)] backdrop-blur-[6px]" onMouseDown={onClose} aria-hidden />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={cx("animate-pop-in relative flex max-h-[92dvh] w-full flex-col rounded-t-[22px] border border-card-line bg-card shadow-pop sm:rounded-[22px]", widths[size])}
+        className={cx("animate-pop-in relative flex max-h-[calc(100dvh-40px)] w-full flex-col rounded-t-[28px] border border-card-line bg-card sm:rounded-[28px]", widths[size])}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 sm:px-7">
+        <div className="flex items-center justify-between gap-4 px-6 pt-6 pb-1.5">
           <div className="min-w-0">
-            <h2 id={titleId} className="text-[22px] leading-tight font-medium tracking-[-0.01em] text-strong">
+            <h2 id={titleId} className="text-[22px] leading-tight font-normal tracking-[-0.03em] text-strong">
               {title}
             </h2>
-            {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
+            {description && <p className="mt-1.5 text-[13px] text-secondary">{description}</p>}
           </div>
-          <IconButton icon={X} label="Close" outline onClick={onClose} className="-mt-0.5 shrink-0" />
+          <IconButton icon={X} label="Close" outline onClick={onClose} className="shrink-0" />
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-2 sm:px-7">{children}</div>
-        {footer && <div className="flex flex-wrap items-center justify-end gap-2.5 px-6 pt-5 pb-6 sm:px-7">{footer}</div>}
+        <div className="flex-1 overflow-y-auto px-6 pt-[18px] pb-2">{children}</div>
+        {footer && <div className="flex flex-wrap items-center justify-end gap-2.5 px-6 pt-[18px] pb-6">{footer}</div>}
       </div>
     </div>,
     document.body
@@ -89,16 +90,16 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, description, co
       size="sm"
       footer={
         <>
-          <Button variant="quiet" onClick={onClose} disabled={busy}>
+          <Button size="lg" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm} loading={busy} data-autofocus>
+          <Button variant={tone === "danger" ? "danger-solid" : "primary"} size="lg" onClick={onConfirm} loading={busy} data-autofocus>
             {confirmLabel}
           </Button>
         </>
       }
     >
-      <p className="text-secondary">{description}</p>
+      <p className="text-[13px] leading-5 text-secondary">{description}</p>
     </Dialog>
   );
 }

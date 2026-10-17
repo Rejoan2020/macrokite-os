@@ -1,21 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { announceInvite, useAction } from "@/lib/client/useAction";
 import { useToast } from "@/components/providers/ToastProvider";
-import { Button, PersonChip } from "@/components/ui/primitives";
-import { PeopleMenu } from "@/components/ui/PeopleMenu";
-import { ConfirmDialog, Dialog } from "@/components/ui/Dialog";
-import { Field, Input, PeoplePicker, Select, Textarea } from "@/components/ui/form";
-import { COMPANY_LABEL, DEFAULT_TASK_PRIORITY, TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_STATUSES, TASK_STATUS_LABELS, taskAssigneeIds, taskPriority } from "@/lib/constants";
+import { Button } from "@/components/ui/primitives";
+import { PrioritySelect } from "@/components/ui/Menus";
+import { PeoplePicker, peopleOrder } from "@/components/ui/PeoplePicker";
+import { Dialog } from "@/components/ui/Dialog";
+import { Field, Input, Select, Textarea } from "@/components/ui/form";
+import { COMPANY_LABEL, DEFAULT_TASK_PRIORITY, TASK_STATUSES, TASK_STATUS_LABELS, taskAssigneeIds, taskPriority } from "@/lib/constants";
 import { projectPhases } from "@/lib/phases";
-import { firstName, pluralize, toLocalInput } from "@/lib/format";
+import { toLocalInput } from "@/lib/format";
 import { canChooseLeads, projectLeadIds } from "@/lib/permissions";
-import { MessageSquare } from "lucide-react";
-import { useTaskManagement, useTaskThreadSummary } from "@/components/tasks/taskHooks";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useTaskManagement } from "@/components/tasks/taskHooks";
 import { projectOwner } from "@/lib/selectors";
 
 /** Projects as "Client · Project" options, company projects first. */
@@ -28,15 +27,28 @@ function useProjectOptions(includeId, allowed = () => true) {
     .map(({ project, owner }) => ({ value: project._id, label: `${owner.label} · ${project.name}` }));
 }
 
+/** Active people from a list of ids, plus anyone already picked (so saving never silently drops them). */
+function usePool(ids, keep = []) {
+  const { lookup, currentUserId } = useWorkspace();
+  const users = [...new Set([...ids, ...keep])].map((id) => lookup.users[id]).filter((u) => u && (u.active || keep.includes(u._id)));
+  return peopleOrder(users, currentUserId);
+}
+
+/** Delete needs a second click: the button turns solid and asks again. */
+function DeleteButton({ label, onConfirm, busy }) {
+  const [armed, setArmed] = useState(false);
+  return (
+    <Button size="lg" variant={armed ? "danger-solid" : "danger"} loading={busy && armed} onClick={() => (armed ? onConfirm() : setArmed(true))} className="mr-auto">
+      {armed ? "Click again to delete" : label}
+    </Button>
+  );
+}
+
 function FormFooter({ formId, busy, label, onClose, onDelete, deleteLabel }) {
   return (
     <>
-      {onDelete && (
-        <button type="button" onClick={onDelete} className="mr-auto rounded-full px-2 py-2 font-medium text-accent hover:text-accent-light">
-          {deleteLabel}
-        </button>
-      )}
-      <Button variant="outline" onClick={onClose}>
+      {onDelete && <DeleteButton label={deleteLabel} onConfirm={onDelete} busy={busy} />}
+      <Button size="lg" onClick={onClose}>
         Cancel
       </Button>
       <Button variant="primary" type="submit" form={formId} loading={busy}>
@@ -46,6 +58,8 @@ function FormFooter({ formId, busy, label, onClose, onDelete, deleteLabel }) {
   );
 }
 
+const formClass = "flex flex-col gap-[18px]";
+
 // ------------------------------------------------------------------ project
 
 export function ProjectDialog({ open, project, defaults, onClose, onSaved }) {
@@ -53,7 +67,7 @@ export function ProjectDialog({ open, project, defaults, onClose, onSaved }) {
 }
 
 function ProjectForm({ project, defaults = {}, onClose, onSaved }) {
-  const { data, activeUsers, currentUserId, currentUser } = useWorkspace();
+  const { data, lookup, activeUsers, currentUserId, currentUser } = useWorkspace();
   const chooseLeads = canChooseLeads(currentUser);
   const { run, busy, fieldErrors } = useAction();
   const [values, setValues] = useState({
@@ -64,8 +78,12 @@ function ProjectForm({ project, defaults = {}, onClose, onSaved }) {
     leadIds: project ? projectLeadIds(project) : [currentUserId],
     clientId: project ? project.clientId ?? "" : defaults.clientId ?? "",
   });
+  const client = values.clientId ? lookup.clients[values.clientId] : null;
+  const ownerName = client ? client.name : data.org.name;
+  // A client's projects are staffed from the client's members; the company's from everyone.
+  const pool = usePool(client?.memberIds?.length ? client.memberIds : activeUsers.map((u) => u._id), project?.memberIds ?? []);
+  const leadPool = pool.filter((u) => values.memberIds.includes(u._id));
   const clientOptions = [...data.clients].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ value: c._id, label: c.name }));
-  const memberUsers = activeUsers.filter((u) => values.memberIds.includes(u._id));
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
 
   const submit = async (e) => {
@@ -87,35 +105,34 @@ function ProjectForm({ project, defaults = {}, onClose, onSaved }) {
     <Dialog
       open
       onClose={onClose}
-      title={project ? "Edit project" : "New project"}
-      footer={<FormFooter formId="project-form" busy={busy} label={project ? "Save" : "Create project"} onClose={onClose} />}
+      title={project ? "Edit project" : `New project in ${ownerName}`}
+      footer={<FormFooter formId="project-form" busy={busy} label={project ? "Save changes" : "Create project"} onClose={onClose} />}
     >
-      <form id="project-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form id="project-form" onSubmit={submit} className={formClass} noValidate>
         <Field label="Name" error={fieldErrors.name}>
-          {(p) => <Input {...p} value={values.name} onChange={set("name")} data-autofocus autoComplete="off" />}
+          {(p) => <Input {...p} value={values.name} onChange={set("name")} placeholder="Website redesign" data-autofocus autoComplete="off" />}
         </Field>
-        <Field label="Description" hint="One line, shown under the name everywhere" error={fieldErrors.description}>
-          {(p) => <Input {...p} value={values.description} onChange={set("description")} />}
+        <Field label="Description" error={fieldErrors.description}>
+          {(p) => <Textarea {...p} value={values.description} onChange={set("description")} placeholder="What is this project about?" maxLength={240} />}
         </Field>
-        {!project?.isInternal && (
+        {project && !project.isInternal && (
           <Field label="For" hint="A client, or the company itself" error={fieldErrors.clientId}>
             {(p) => <Select {...p} value={values.clientId} onChange={set("clientId")} options={[{ value: "", label: COMPANY_LABEL }, ...clientOptions]} />}
           </Field>
         )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Deadline" error={fieldErrors.deadline}>
-            {(p) => <Input {...p} type="date" value={values.deadline} onChange={set("deadline")} />}
-          </Field>
-        </div>
-        <Field label="Members" error={fieldErrors.memberIds}>
-          {(p) => <PeoplePicker {...p} users={activeUsers} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
+        <Field label="Deadline" error={fieldErrors.deadline}>
+          {(p) => <Input {...p} type="date" value={values.deadline} onChange={set("deadline")} />}
+        </Field>
+        <Field label="Team" hint={`Pick from the members of ${ownerName}`} error={fieldErrors.memberIds}>
+          {(p) => <PeoplePicker id={p.id} people={pool} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
         </Field>
         {chooseLeads && (
           <Field label="Leads" hint="Leads create and assign this project’s tasks. Admins can always do this too." error={fieldErrors.leadIds}>
             {(p) => (
               <PeoplePicker
-                {...p}
-                users={memberUsers}
+                id={p.id}
+                label="Add lead"
+                people={leadPool}
                 value={values.leadIds.filter((id) => values.memberIds.includes(id))}
                 onChange={(leadIds) => setValues((v) => ({ ...v, leadIds }))}
               />
@@ -134,9 +151,8 @@ export function TaskDialog({ open, task, defaults, onClose }) {
 }
 
 function TaskForm({ task, defaults = {}, onClose }) {
-  const { data, lookup, activeUsers, currentUserId } = useWorkspace();
+  const { lookup } = useWorkspace();
   const { run, busy, fieldErrors } = useAction();
-  const [confirming, setConfirming] = useState(false);
   // Tasks can only be created in, or moved to, projects you lead (any project for admins).
   const { canManage, projects: manageable } = useTaskManagement();
   const projectOptions = useProjectOptions(task?.projectId, canManage);
@@ -148,24 +164,25 @@ function TaskForm({ task, defaults = {}, onClose }) {
     description: task?.description ?? defaults.description ?? "",
     projectId: initialProject,
     phase: task?.phase ?? defaults.phase ?? lookup.projects[initialProject]?.phase ?? projectPhases(lookup.projects[initialProject])[0]._id,
-    assigneeIds: task ? taskAssigneeIds(task) : defaults.assigneeIds ?? [currentUserId],
+    assigneeIds: task ? taskAssigneeIds(task) : defaults.assigneeIds ?? [],
     dueDate: task?.dueDate ?? defaults.dueDate ?? "",
     priority: task ? taskPriority(task) : defaults.priority ?? DEFAULT_TASK_PRIORITY,
     status: task?.status ?? "todo",
   });
+  const project = lookup.projects[values.projectId];
+  const fixedProject = !task && preferred;
+  const pool = usePool(project?.memberIds ?? [], values.assigneeIds);
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
   const setProject = (e) => {
     const projectId = e.target.value;
     setValues((v) => ({ ...v, projectId, phase: lookup.projects[projectId]?.phase ?? v.phase }));
   };
-  // Former assignees stay pickable so saving doesn't silently drop them.
-  const people = [...activeUsers, ...values.assigneeIds.filter((id) => !activeUsers.some((u) => u._id === id)).map((id) => lookup.users[id]).filter(Boolean)];
 
   const submit = async (e) => {
     e.preventDefault();
     const result = task
       ? await run({ type: "task.update", id: task._id, data: values }, { success: "Task updated" })
-      : await run({ type: "task.create", data: { ...values, messageId: defaults.messageId, meetingId: defaults.meetingId } }, { success: "Task added" });
+      : await run({ type: "task.create", data: { ...values, messageId: defaults.messageId, meetingId: defaults.meetingId } }, { success: "Task created" });
     if (result) onClose();
   };
   const remove = async () => {
@@ -173,73 +190,40 @@ function TaskForm({ task, defaults = {}, onClose }) {
   };
 
   return (
-    <>
-      <Dialog
-        open={!confirming}
-        onClose={onClose}
-        title={task ? "Edit task" : "Add task"}
-        footer={
-          <FormFooter
-            formId="task-form"
-            busy={busy}
-            label={task ? "Save" : "Add task"}
-            onClose={onClose}
-            onDelete={task ? () => setConfirming(true) : null}
-            deleteLabel="Delete"
-          />
-        }
-      >
-        <form id="task-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field label="Title" error={fieldErrors.title}>
-            {(p) => <Input {...p} value={values.title} onChange={set("title")} data-autofocus autoComplete="off" />}
+    <Dialog
+      open
+      onClose={onClose}
+      title={task ? "Edit task" : fixedProject ? `New task in ${project.name}` : "New task"}
+      footer={<FormFooter formId="task-form" busy={busy} label={task ? "Save changes" : "Create task"} onClose={onClose} onDelete={task ? remove : null} deleteLabel="Delete task" />}
+    >
+      <form id="task-form" onSubmit={submit} className={formClass} noValidate>
+        <Field label="Title" error={fieldErrors.title}>
+          {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Draft the homepage copy" data-autofocus autoComplete="off" />}
+        </Field>
+        <Field label="Description" error={fieldErrors.description}>
+          {(p) => <Textarea {...p} value={values.description} onChange={set("description")} placeholder="Add details, links or acceptance criteria" maxLength={5000} />}
+        </Field>
+        {!fixedProject && (
+          <Field label="Project" error={fieldErrors.projectId}>
+            {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
           </Field>
-          <Field label="Description" hint="Optional. What needs doing, links, acceptance criteria." error={fieldErrors.description}>
-            {(p) => <Textarea {...p} rows={3} value={values.description} onChange={set("description")} maxLength={5000} />}
+        )}
+        <Field label="Assignees" hint={project ? `Pick from the ${project.name} team` : undefined} error={fieldErrors.assigneeIds}>
+          {(p) => <PeoplePicker id={p.id} label="Add assignee" people={pool} value={values.assigneeIds} onChange={(assigneeIds) => setValues((v) => ({ ...v, assigneeIds }))} />}
+        </Field>
+        <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-3">
+          <Field label="Priority" error={fieldErrors.priority}>
+            {() => <PrioritySelect field value={values.priority} onChange={(priority) => setValues((v) => ({ ...v, priority }))} />}
           </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Project" error={fieldErrors.projectId}>
-              {(p) => <Select {...p} value={values.projectId} onChange={setProject} options={projectOptions} placeholder="Choose a project" />}
-            </Field>
-            <Field label="Due date" error={fieldErrors.dueDate}>
-              {(p) => <Input {...p} type="date" value={values.dueDate} onChange={set("dueDate")} />}
-            </Field>
-            <Field label="Priority" error={fieldErrors.priority}>
-              {(p) => <Select {...p} value={values.priority} onChange={set("priority")} options={TASK_PRIORITIES.map((v) => ({ value: v, label: TASK_PRIORITY_LABELS[v] }))} />}
-            </Field>
-            {task && (
-              <Field label="Status" error={fieldErrors.status}>
-                {(p) => <Select {...p} value={values.status} onChange={set("status")} options={TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] }))} />}
-              </Field>
-            )}
-          </div>
-          <Field label="Assignees" hint="Pick one or more people, or leave it for later" error={fieldErrors.assigneeIds}>
-            {(p) => <PeoplePicker {...p} users={people} value={values.assigneeIds} onChange={(assigneeIds) => setValues((v) => ({ ...v, assigneeIds }))} />}
+          <Field label="Due date" error={fieldErrors.dueDate}>
+            {(p) => <Input {...p} type="date" value={values.dueDate} onChange={set("dueDate")} />}
           </Field>
-          {task && <DiscussionLink taskId={task._id} onClick={onClose} />}
-        </form>
-      </Dialog>
-      <ConfirmDialog
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        onConfirm={remove}
-        busy={busy}
-        tone="danger"
-        title="Delete this task?"
-        description={`“${task?.title}” will be removed for everyone.`}
-        confirmLabel="Delete task"
-      />
-    </>
-  );
-}
-
-/** Link to the task's page, where its discussion is. Closes the dialog on the way. */
-function DiscussionLink({ taskId, onClick }) {
-  const { count, unread } = useTaskThreadSummary(taskId);
-  return (
-    <Link href={`/tasks/${taskId}`} onClick={onClick} className="flex items-center gap-2 self-start text-[13px] text-accent hover:text-accent-light">
-      <MessageSquare className="size-4" aria-hidden />
-      {count ? `Open the task · ${pluralize(count, "comment")}${unread ? ` (${unread} new)` : ""}` : "Open the task page to comment on it"}
-    </Link>
+          <Field label="Status" error={fieldErrors.status}>
+            {(p) => <Select {...p} value={values.status} onChange={set("status")} options={TASK_STATUSES.map((s) => ({ value: s, label: TASK_STATUS_LABELS[s] }))} />}
+          </Field>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -249,16 +233,17 @@ export function MeetingDialog({ open, meeting, defaults, onClose, onSaved }) {
   return open ? <MeetingForm key={meeting?._id ?? "new"} meeting={meeting} defaults={defaults} onClose={onClose} onSaved={onSaved} /> : null;
 }
 
+/** New meetings start tomorrow at 10 AM. */
 function defaultStart() {
   const d = new Date();
-  d.setHours(d.getHours() + 1, 0, 0, 0);
+  d.setDate(d.getDate() + 1);
+  d.setHours(10, 0, 0, 0);
   return toLocalInput(d.toISOString());
 }
 
 function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
-  const { data, lookup, activeUsers, currentUserId } = useWorkspace();
+  const { data, activeUsers, currentUserId } = useWorkspace();
   const { run, busy, fieldErrors } = useAction();
-  const [confirming, setConfirming] = useState(false);
   // Meetings still belong to a project; new ones go to the company project unless opened from one.
   const internal = data.projects.find((p) => p.isInternal) ?? data.projects.find((p) => !p.archived);
   const projectId = meeting?.projectId ?? defaults.projectId ?? internal?._id ?? "";
@@ -269,9 +254,8 @@ function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
     callUrl: meeting?.callUrl ?? "",
     attendeeIds: meeting?.attendeeIds ?? defaults.attendeeIds ?? [currentUserId],
   });
+  const pool = usePool(activeUsers.map((u) => u._id), values.attendeeIds);
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
-  const attendees = values.attendeeIds.map((id) => lookup.users[id]).filter(Boolean);
-  const candidates = activeUsers.filter((u) => !values.attendeeIds.includes(u._id));
   const agendaError = fieldErrors.agenda ?? Object.entries(fieldErrors).find(([key]) => key.startsWith("agenda."))?.[1];
 
   const submit = async (e) => {
@@ -299,70 +283,32 @@ function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
   };
 
   return (
-    <>
-      <Dialog
-        open={!confirming}
-        onClose={onClose}
-        title={meeting ? "Edit meeting" : "New meeting"}
-        footer={
-          <FormFooter
-            formId="meeting-form"
-            busy={busy}
-            label={meeting ? "Save changes" : "Schedule"}
-            onClose={onClose}
-            onDelete={meeting ? () => setConfirming(true) : null}
-            deleteLabel="Delete meeting"
-          />
-        }
-      >
-        <form id="meeting-form" onSubmit={submit} className="flex flex-col gap-5" noValidate>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Title" error={fieldErrors.title}>
-              {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Weekly sync" data-autofocus autoComplete="off" />}
-            </Field>
-            <Field label="Starts" error={fieldErrors.startsAt}>
-              {(p) => <Input {...p} type="datetime-local" value={values.startsAt} onChange={set("startsAt")} />}
-            </Field>
-          </div>
-          <Field label="Agenda" error={agendaError}>
-            {(p) => <Textarea {...p} rows={4} value={values.agenda} onChange={set("agenda")} placeholder="What will you cover? One point per line works well." />}
+    <Dialog
+      open
+      onClose={onClose}
+      title={meeting ? "Edit meeting" : "New meeting"}
+      footer={<FormFooter formId="meeting-form" busy={busy} label={meeting ? "Save changes" : "Schedule"} onClose={onClose} onDelete={meeting ? remove : null} deleteLabel="Delete meeting" />}
+    >
+      <form id="meeting-form" onSubmit={submit} className={formClass} noValidate>
+        <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-2">
+          <Field label="Title" error={fieldErrors.title}>
+            {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Weekly sync" data-autofocus autoComplete="off" />}
           </Field>
-          <Field label="Call link" hint="Optional: Google Meet, Zoom or any link" error={fieldErrors.callUrl}>
-            {(p) => <Input {...p} type="url" inputMode="url" placeholder="https://meet.google.com/…" value={values.callUrl} onChange={set("callUrl")} />}
+          <Field label="Starts" error={fieldErrors.startsAt}>
+            {(p) => <Input {...p} type="datetime-local" value={values.startsAt} onChange={set("startsAt")} />}
           </Field>
-          <div className="flex flex-col gap-2">
-            <span className="text-[13px] text-secondary">Attendees</span>
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Attendees">
-              {attendees.map((u) => (
-                <PersonChip
-                  key={u._id}
-                  user={u}
-                  label={u._id === currentUserId ? `${firstName(u.name)} (you)` : u.name}
-                  onRemove={() => setValues((v) => ({ ...v, attendeeIds: v.attendeeIds.filter((id) => id !== u._id) }))}
-                  removeLabel={`Remove ${u.name}`}
-                />
-              ))}
-              <PeopleMenu label="Add attendee" people={candidates} onPick={(u) => setValues((v) => ({ ...v, attendeeIds: [...v.attendeeIds, u._id] }))} />
-            </div>
-            {fieldErrors.attendeeIds && (
-              <p className="text-xs text-danger" role="alert">
-                {fieldErrors.attendeeIds}
-              </p>
-            )}
-          </div>
-        </form>
-      </Dialog>
-      <ConfirmDialog
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        onConfirm={remove}
-        busy={busy}
-        tone="danger"
-        title="Delete this meeting?"
-        description="Its agenda, notes and decisions are removed. Action items stay as tasks."
-        confirmLabel="Delete meeting"
-      />
-    </>
+        </div>
+        <Field label="Agenda" error={agendaError}>
+          {(p) => <Textarea {...p} value={values.agenda} onChange={set("agenda")} placeholder="What will you cover? One point per line works well." />}
+        </Field>
+        <Field label="Call link" hint="Optional: Google Meet, Zoom or any link" error={fieldErrors.callUrl}>
+          {(p) => <Input {...p} type="url" inputMode="url" placeholder="https://meet.google.com/..." value={values.callUrl} onChange={set("callUrl")} />}
+        </Field>
+        <Field label="Attendees" error={fieldErrors.attendeeIds}>
+          {(p) => <PeoplePicker id={p.id} label="Add attendee" people={pool} value={values.attendeeIds} onChange={(attendeeIds) => setValues((v) => ({ ...v, attendeeIds }))} />}
+        </Field>
+      </form>
+    </Dialog>
   );
 }
 
@@ -384,16 +330,9 @@ function InviteForm({ onClose }) {
     onClose();
   };
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      size="sm"
-      title="Invite member"
-      description="We email them an invite link. They join as a member the first time they sign up or sign in with this email."
-      footer={<FormFooter formId="invite-form" busy={busy} label="Send invite" onClose={onClose} />}
-    >
-      <form id="invite-form" onSubmit={submit} noValidate>
-        <Field label="Email" error={fieldErrors.email}>
+    <Dialog open onClose={onClose} title="Invite member" footer={<FormFooter formId="invite-form" busy={busy} label="Send invite" onClose={onClose} />}>
+      <form id="invite-form" onSubmit={submit} className={formClass} noValidate>
+        <Field label="Email" hint="We email them an invite link. They join as a member the first time they sign in with this email." error={fieldErrors.email}>
           {(p) => <Input {...p} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" data-autofocus />}
         </Field>
       </form>
@@ -408,10 +347,10 @@ export function ClientDialog({ open, client, onClose, onSaved }) {
 }
 
 function ClientForm({ client, onClose, onSaved }) {
-  const { data } = useWorkspace();
+  const { data, activeUsers, currentUserId } = useWorkspace();
   const { run, busy, fieldErrors } = useAction();
-  const [confirming, setConfirming] = useState(false);
-  const [values, setValues] = useState({ name: client?.name ?? "", description: client?.description ?? "" });
+  const [values, setValues] = useState({ name: client?.name ?? "", description: client?.description ?? "", memberIds: client?.memberIds ?? [currentUserId] });
+  const pool = usePool(activeUsers.map((u) => u._id), values.memberIds);
   const set = (key) => (e) => setValues((v) => ({ ...v, [key]: e.target.value }));
   const projects = client ? data.projects.filter((p) => p.clientId === client._id).length : 0;
 
@@ -419,7 +358,7 @@ function ClientForm({ client, onClose, onSaved }) {
     e.preventDefault();
     const result = client
       ? await run({ type: "client.update", id: client._id, data: values }, { success: "Client updated" })
-      : await run({ type: "client.create", data: values }, { success: "Client added" });
+      : await run({ type: "client.create", data: values }, { success: "Client created" });
     if (result) {
       onClose();
       onSaved?.(result);
@@ -433,44 +372,34 @@ function ClientForm({ client, onClose, onSaved }) {
   };
 
   return (
-    <>
-      <Dialog
-        open={!confirming}
-        onClose={onClose}
-        size="sm"
-        title={client ? "Edit client" : "New client"}
-        footer={
-          <FormFooter
-            formId="client-form"
-            busy={busy}
-            label={client ? "Save" : "Add client"}
-            onClose={onClose}
-            onDelete={client && !projects ? () => setConfirming(true) : null}
-            deleteLabel="Remove"
-          />
-        }
-      >
-        <form id="client-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field label="Name" error={fieldErrors.name}>
-            {(p) => <Input {...p} value={values.name} onChange={set("name")} data-autofocus autoComplete="off" placeholder="Company name" />}
-          </Field>
-          <Field label="Description" hint="One line about who they are" error={fieldErrors.description}>
-            {(p) => <Input {...p} value={values.description} onChange={set("description")} />}
-          </Field>
-          {client && projects > 0 && <p className="text-xs text-faint">To remove this client, move its {pluralize(projects, "project")} to another client or to the company first.</p>}
-        </form>
-      </Dialog>
-      <ConfirmDialog
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        onConfirm={remove}
-        busy={busy}
-        tone="danger"
-        title={`Remove ${client?.name}?`}
-        description="The client is removed for everyone. It has no projects, so nothing else changes."
-        confirmLabel="Remove client"
-      />
-    </>
+    <Dialog
+      open
+      onClose={onClose}
+      title={client ? "Edit client" : "New client"}
+      footer={
+        <FormFooter
+          formId="client-form"
+          busy={busy}
+          label={client ? "Save changes" : "Create client"}
+          onClose={onClose}
+          // A client can only go once its projects have moved elsewhere.
+          onDelete={client && !projects ? remove : null}
+          deleteLabel="Delete client"
+        />
+      }
+    >
+      <form id="client-form" onSubmit={submit} className={formClass} noValidate>
+        <Field label="Name" error={fieldErrors.name}>
+          {(p) => <Input {...p} value={values.name} onChange={set("name")} placeholder="Acme Inc." data-autofocus autoComplete="off" />}
+        </Field>
+        <Field label="Description" error={fieldErrors.description}>
+          {(p) => <Textarea {...p} value={values.description} onChange={set("description")} placeholder="Who they are and what you're doing for them" maxLength={2000} />}
+        </Field>
+        <Field label="Members" hint="You're always a member of your clients" error={fieldErrors.memberIds}>
+          {(p) => <PeoplePicker id={p.id} people={pool} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
+        </Field>
+      </form>
+    </Dialog>
   );
 }
 
@@ -484,19 +413,26 @@ function GroupForm({ group, onClose }) {
   const { activeUsers, currentUserId } = useWorkspace();
   const router = useRouter();
   const { run, busy, fieldErrors } = useAction();
-  const [values, setValues] = useState({ name: group?.name ?? "", memberIds: group?.memberIds ?? [] });
-  // You're always in a group you start, so you aren't offered when creating one.
-  const people = group ? activeUsers : activeUsers.filter((u) => u._id !== currentUserId);
+  const [values, setValues] = useState({ name: group?.name ?? "", memberIds: group?.memberIds ?? [currentUserId] });
+  const pool = usePool(activeUsers.map((u) => u._id), values.memberIds);
 
   const submit = async (e) => {
     e.preventDefault();
+    // You're always in groups you create.
+    const data = { ...values, memberIds: group ? values.memberIds : [...new Set([currentUserId, ...values.memberIds])] };
     const result = group
-      ? await run({ type: "group.update", id: group._id, data: values }, { success: "Group updated" })
-      : await run({ type: "group.create", data: values }, { success: "Group created" });
+      ? await run({ type: "group.update", id: group._id, data }, { success: "Group updated" })
+      : await run({ type: "group.create", data }, { success: "Group created" });
     if (!result) return;
     onClose();
     if (!group) router.push(`/inbox/${result._id}`);
     else if (!result.memberIds.includes(currentUserId)) router.push("/inbox");
+  };
+  const remove = async () => {
+    if (await run({ type: "group.delete", id: group._id }, { success: "Group deleted" })) {
+      onClose();
+      router.push("/inbox");
+    }
   };
 
   return (
@@ -504,15 +440,14 @@ function GroupForm({ group, onClose }) {
       open
       onClose={onClose}
       title={group ? "Edit group" : "New group"}
-      description={group ? undefined : "A chat for a project, a team or anything else. Everyone in it can rename it and add people."}
-      footer={<FormFooter formId="group-form" busy={busy} label={group ? "Save" : "Create group"} onClose={onClose} />}
+      footer={<FormFooter formId="group-form" busy={busy} label={group ? "Save changes" : "Create group"} onClose={onClose} onDelete={group ? remove : null} deleteLabel="Delete group" />}
     >
-      <form id="group-form" onSubmit={submit} className="flex flex-col gap-4" noValidate>
-        <Field label="Name" error={fieldErrors.name}>
-          {(p) => <Input {...p} value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} data-autofocus autoComplete="off" placeholder="Design crew" />}
+      <form id="group-form" onSubmit={submit} className={formClass} noValidate>
+        <Field label="Group name" error={fieldErrors.name}>
+          {(p) => <Input {...p} value={values.name} onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))} placeholder="Design team, Tesla launch…" data-autofocus autoComplete="off" />}
         </Field>
-        <Field label="People" hint={group ? "Unpick yourself to leave the group" : undefined} error={fieldErrors.memberIds}>
-          {(p) => <PeoplePicker {...p} users={people} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
+        <Field label="Members" hint="You're always in groups you create" error={fieldErrors.memberIds}>
+          {(p) => <PeoplePicker id={p.id} people={pool} value={values.memberIds} onChange={(memberIds) => setValues((v) => ({ ...v, memberIds }))} />}
         </Field>
       </form>
     </Dialog>

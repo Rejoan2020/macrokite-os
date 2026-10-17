@@ -5,10 +5,10 @@ import { Pencil, Plus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { Countdown, CopyLinkButton, ReminderMenu, shortLink } from "@/components/meetings/MeetingBits";
-import { PeopleMenu } from "@/components/ui/PeopleMenu";
-import { Button, Card, cx, EmptyNote, IconButton, Page, PageHeader, PersonChip, SectionLabel } from "@/components/ui/primitives";
+import { PeoplePicker, peopleOrder } from "@/components/ui/PeoplePicker";
+import { Button, Card, cx, EmptyNote, IconButton, Page, PageHeader, SectionLabel } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
-import { firstName, formatDay, formatShortDate, formatTime, parseDate, pluralize, todayISO } from "@/lib/format";
+import { formatDay, formatShortDate, formatTime, parseDate, pluralize, todayISO } from "@/lib/format";
 import { actionItems, meetingBuckets } from "@/lib/selectors";
 
 export function MeetingsView() {
@@ -18,7 +18,7 @@ export function MeetingsView() {
   const { upcoming, past } = meetingBuckets(data.meetings, today);
 
   return (
-    <Page>
+    <Page className="gap-[14px]">
       <PageHeader
         title="Meetings"
         actions={
@@ -28,6 +28,8 @@ export function MeetingsView() {
         }
       />
 
+      {/* The heading sits 24px above the first card; cards are 14px apart. */}
+      <div aria-hidden className="h-2.5" />
       {!upcoming.length && !past.length && <EmptyNote>No meetings yet. Schedule one to keep agenda, notes, decisions and action items together.</EmptyNote>}
       {!upcoming.length && past.length > 0 && <EmptyNote>Nothing scheduled. Press New meeting to plan the next one.</EmptyNote>}
 
@@ -52,91 +54,78 @@ export function MeetingsView() {
 }
 
 function MeetingCard({ meeting }) {
-  const { lookup, activeUsers, currentUserId } = useWorkspace();
+  const { activeUsers, currentUserId } = useWorkspace();
   const overlays = useOverlays();
-  const { run, busy } = useAction();
+  const { run } = useAction();
   const date = parseDate(meeting.startsAt).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-  const attendees = meeting.attendeeIds.map((id) => lookup.users[id]).filter(Boolean);
-  const candidates = activeUsers.filter((u) => !meeting.attendeeIds.includes(u._id));
-  const setAttendees = (attendeeIds, success) => run({ type: "meeting.update", id: meeting._id, data: { attendeeIds } }, { success });
+  const people = peopleOrder(activeUsers, currentUserId);
+  // Attendees are added and removed right on the card, saved as you go.
+  const setAttendees = (attendeeIds) => run({ type: "meeting.update", id: meeting._id, data: { attendeeIds } }, { silent: true });
 
   return (
-    <Card as="article" aria-labelledby={`mt-${meeting._id}`} className="flex flex-col gap-4 px-6 pt-6 pb-4">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{date}</span>
-          <h2 id={`mt-${meeting._id}`} className="text-[22px] font-medium tracking-[-0.01em] text-strong">
+    <Card as="article" aria-labelledby={`mt-${meeting._id}`} className="px-6 pt-[22px] pb-[18px]">
+      <header className="flex items-start justify-between gap-5">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold tracking-[0.06em] text-faint uppercase">{date}</div>
+          <h2 id={`mt-${meeting._id}`} className="mt-1.5 text-xl font-medium tracking-[-0.02em] text-strong">
             <Link href={`/meetings/${meeting._id}`} className="hover:underline hover:underline-offset-4">
               {meeting.title}
             </Link>
           </h2>
         </div>
-        <div className="flex items-start gap-3">
-          <div className="flex flex-col items-end">
-            <span className="text-[28px] leading-tight font-semibold tracking-[-0.01em] text-strong tabular-nums">{formatTime(meeting.startsAt)}</span>
-            <Countdown startsAt={meeting.startsAt} className="text-[12px]" />
-          </div>
-          <div className="flex items-center gap-1.5 self-stretch border-l border-line pl-3">
-            <ReminderMenu meeting={meeting} />
-            <IconButton icon={Pencil} outline label="Edit meeting" onClick={() => overlays.editMeeting(meeting._id)} />
-          </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[26px] leading-[1.1] font-semibold tracking-[-0.04em] text-strong tabular-nums">{formatTime(meeting.startsAt)}</div>
+          <Countdown startsAt={meeting.startsAt} className="mt-1 block" />
+        </div>
+        <div className="flex shrink-0 items-start gap-1.5 self-stretch border-l border-row pl-4">
+          <ReminderMenu meeting={meeting} />
+          <IconButton icon={Pencil} outline label="Edit meeting" onClick={() => overlays.editMeeting(meeting._id)} className="[&_svg]:size-[15px]" />
         </div>
       </header>
 
-      <section aria-label="Attendees" className="flex flex-col gap-2.5">
-        <SectionLabel as="h3">Attendees</SectionLabel>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {attendees.map((u) => (
-            <PersonChip
-              key={u._id}
-              user={u}
-              label={u._id === currentUserId ? `${firstName(u.name)} (you)` : firstName(u.name)}
-              onRemove={() => setAttendees(meeting.attendeeIds.filter((id) => id !== u._id), `${u.name} removed`)}
-              removeLabel={`Remove ${u.name}`}
-            />
-          ))}
-          <PeopleMenu label="Add attendee" people={candidates} disabled={busy} onPick={(u) => setAttendees([...meeting.attendeeIds, u._id], `${u.name} invited`)} />
-        </div>
+      <section aria-label="Attendees" className="mt-[18px]">
+        <SectionLabel as="h3" className="mb-2">
+          Attendees
+        </SectionLabel>
+        <PeoplePicker label="Add attendee" people={people} value={meeting.attendeeIds} onChange={setAttendees} />
       </section>
 
-      <section aria-label="Agenda" className="flex flex-col gap-1.5">
-        <SectionLabel as="h3">Agenda</SectionLabel>
+      <section aria-label="Agenda" className="mt-[18px]">
+        <SectionLabel as="h3" className="mb-2">
+          Agenda
+        </SectionLabel>
         {meeting.agenda.length ? (
-          <ol className="flex flex-col text-[15px] leading-[1.55] text-strong">
+          <ol className="text-sm leading-[23px] text-fg">
             {meeting.agenda.map((item, i) => (
-              <li key={item._id} className={cx(item.covered && "text-muted line-through")}>
+              <li key={item._id} className={cx(item.covered && "text-faint line-through")}>
                 {i + 1}. {item.title}
               </li>
             ))}
           </ol>
         ) : (
-          <p className="text-[14px] text-muted">
-            No agenda yet.{" "}
-            <button type="button" onClick={() => overlays.editMeeting(meeting._id)} className="text-accent hover:text-accent-light">
-              Add topics
-            </button>
-          </p>
+          <p className="text-sm leading-[23px] text-faint">No agenda added</p>
         )}
       </section>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+      <div className="mt-[18px] flex gap-2 border-t border-row pt-4">
         {meeting.callUrl ? (
           <>
-            <a href={meeting.callUrl} target="_blank" rel="noopener noreferrer" className="flex h-12 min-w-0 flex-[1_1_240px] items-center truncate rounded-2xl bg-input px-5 text-[14px] text-secondary hover:text-fg">
-              {shortLink(meeting.callUrl)}
+            <a
+              href={meeting.callUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={meeting.callUrl}
+              className="flex h-[52px] min-w-0 flex-1 items-center overflow-hidden rounded-[14px] bg-raised px-[18px] text-sm whitespace-nowrap text-secondary hover:text-fg"
+            >
+              <span className="truncate">{shortLink(meeting.callUrl)}</span>
             </a>
-            <CopyLinkButton url={meeting.callUrl} labelled className="h-12" />
-            <Button variant="accent" href={meeting.callUrl} target="_blank" rel="noopener noreferrer" className="h-12 px-7">
+            <CopyLinkButton url={meeting.callUrl} className="h-[52px] px-[18px]" />
+            <a href={meeting.callUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-[52px] shrink-0 items-center rounded-full border border-accent bg-accent px-[26px] text-sm font-medium text-white hover:brightness-[1.08]">
               Join
-            </Button>
+            </a>
           </>
         ) : (
-          <>
-            <span className="flex h-12 flex-1 items-center rounded-2xl bg-input px-5 text-[14px] text-faint">No call link yet</span>
-            <Button variant="outline" onClick={() => overlays.editMeeting(meeting._id)} className="h-12">
-              Add link
-            </Button>
-          </>
+          <span className="text-xs text-faint">No call link</span>
         )}
       </div>
     </Card>

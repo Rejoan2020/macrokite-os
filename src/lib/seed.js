@@ -39,14 +39,14 @@ export function buildSeed(now = new Date()) {
 
   const invites = [{ _id: "inv_rafi", orgId, email: "rafi@macrokite.dev", invitedBy: A, createdAt: on(-2, 10), sentAt: on(-2, 10), acceptedAt: null }];
 
-  const client = (_id, name, description) => ({ _id, orgId, name, description, createdBy: A, createdAt: created, updatedAt: created });
+  const client = (_id, name, description, memberIds) => ({ _id, orgId, name, description, memberIds, createdBy: A, createdAt: created, updatedAt: created });
   const clients = [
-    client("cli_northwind", "Northwind Logistics", "Same-day delivery across Dhaka and Chattogram."),
-    client("cli_jajabor", "Jajabor Travel", "A small team making domestic travel easy to plan."),
-    client("cli_bloom", "Bloom & Co", "Plant shop with a subscription box."),
-    client("cli_carefirst", "CareFirst Clinics", "Family clinics with online booking."),
-    client("cli_lumen", "Lumen Analytics", "Reporting tools for retail teams."),
-    client("cli_quill", "Quill Legal", "Boutique law firm."),
+    client("cli_northwind", "Northwind Logistics", "Same-day delivery across Dhaka and Chattogram.", [A]),
+    client("cli_jajabor", "Jajabor Travel", "A small team making domestic travel easy to plan.", [A, S, T]),
+    client("cli_bloom", "Bloom & Co", "Plant shop with a subscription box.", [A, S, T]),
+    client("cli_carefirst", "CareFirst Clinics", "Family clinics with online booking.", [A, S]),
+    client("cli_lumen", "Lumen Analytics", "Reporting tools for retail teams.", [S]),
+    client("cli_quill", "Quill Legal", "Boutique law firm.", [A, S]),
   ];
 
   const project = (_id, name, description, phase, deadline, memberIds, extra = {}) => ({

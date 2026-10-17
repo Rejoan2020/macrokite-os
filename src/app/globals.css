@@ -1,155 +1,172 @@
 @import "tailwindcss";
 
 /*
- * Macrokite OS design tokens. Dark is the default; [data-theme="light"] on <html> switches to light.
- * The theme script in the root layout sets data-theme from the saved preference (or the system
- * setting) before the first paint.
+ * Macrokite OS design tokens, from the MacroKite prototype's soft, floating-card system.
+ * Dark is the default; [data-theme="light"] on <html> switches to light. The theme script in the
+ * root layout sets data-theme from the saved preference (or the system setting) before first paint.
+ * Primary is navy in light and near-white in dark, so buttons, chips and the chart highlight stay
+ * the strongest element; orange is the brand accent for small highlights.
  */
 :root {
-  --bg-page: #0e0f11;
-  --bg-sidebar: #17181b;
-  --bg-card: #17181b;
-  --bg-input: #1f2024;
-  --bg-hover: #222428;
-  --bg-selected: #292b30;
-  --bg-bubble: #222428;
-  --bg-raised: #1f2024; /* rows and tiles inside a card */
+  --bg-page: #0e1014;
+  --bg-sidebar: #171a20;
+  --bg-card: #171a20;
+  --bg-input: #1f232b;     /* surface-2: fields, hovers */
+  --bg-hover: #1f232b;
+  --bg-selected: #292e38;  /* surface-3: tracks, pressed */
+  --bg-bubble: #1f232b;
+  --bg-raised: #1c2027;    /* item-bg: rows and tiles inside a card */
   --card-border: transparent;
 
-  --border: #2a2c31;
-  --border-row: #232529;
-  --border-sidebar: #26282c;
-  --border-dashed: #3a3d43;
+  --border: #353b47;       /* border-strong: outlines of buttons and chips */
+  --border-row: #252a33;   /* hairlines between rows */
+  --border-sidebar: #252a33;
+  --border-dashed: #353b47;
 
-  --text-strong: #f6f6f7;
-  --text: #ebebed;
-  --text-body: #d7d8db;
-  --text-soft: #c5c7cb;
-  --text-secondary: #a4a7ad;
-  --text-muted: #8a8d94;
-  --text-faint: #6c6f76;
+  --text-strong: #eceef3;
+  --text: #eceef3;
+  --text-body: #d9dce3;
+  --text-soft: #c3c8d2;
+  --text-secondary: #a5acba;
+  --text-muted: #8a91a0;
+  --text-faint: #6e7686;
 
-  --primary: #f6f6f7; /* white pill buttons */
-  --primary-on: #121315;
+  --primary: #eceef3;
+  --primary-on: #14171c;
   --primary-hover: #ffffff;
 
-  --accent: #f26b3a;
+  --accent: #f06a3f;
   --accent-on: #ffffff;
-  --accent-light: #ff8a5e;
-  --accent-tint: #3a1f16;
-  --accent-tint-text: #ffd5c4;
+  --accent-light: #ff9b78;
+  --accent-tint: rgb(240 106 63 / 0.15);
+  --accent-tint-text: #ff9b78;
 
-  --success: #34c77b;
-  --success-tint: #13291e;
-  --success-text: #5fd99a;
-  --info: #5b8def;
-  --info-tint: #18243a;
-  --info-text: #8fb3ff;
+  --success: #3cbf92;
+  --success-tint: rgb(60 191 146 / 0.14);
+  --success-text: #6fd8b1;
+  --info: #78a6e8;
+  --info-tint: rgb(120 166 232 / 0.15);
+  --info-text: #9cc0f2;
 
-  --decision-bg: #12201a;
-  --decision-border: #22402f;
-  --decision-divider: #1b3327;
-  --decision-meta: #7fbf9c;
+  --decision-bg: rgb(60 191 146 / 0.08);
+  --decision-border: rgb(60 191 146 / 0.22);
+  --decision-divider: rgb(60 191 146 / 0.14);
+  --decision-meta: #6fd8b1;
 
-  --danger: #ff7a68;
-  --danger-border: #4d2a24;
-  --danger-outline: #3a211c;
+  /* Urgent and overdue use the brand orange, as in the prototype. */
+  --danger: #ff9b78;
+  --danger-border: rgb(240 106 63 / 0.35);
+  --danger-outline: rgb(240 106 63 / 0.15);
 
-  --warning: #f7c35c;
-  --warning-strong: #f5b83d;
-  --warning-tint: #33270f;
-  --warning-banner-bg: #1d1910;
-  --warning-banner-border: #43361a;
+  --warning: #f0c063;
+  --warning-strong: #fbbf24;
+  --warning-tint: rgb(226 169 59 / 0.14);
+  --warning-banner-bg: rgb(226 169 59 / 0.08);
+  --warning-banner-border: rgb(226 169 59 / 0.25);
 
-  --phase-done: var(--accent);
-  --phase-current: var(--accent-light);
-  --phase-todo: #2c2e33;
-  --phase-done-hold: #5a5d63;
-  --phase-current-hold: #8a8d94;
+  --todo: #6f7789;
+  --amber: #e2a93b;        /* the dot on High priority */
+  --card-hover: #1b1e25;   /* hovered cards (clients, projects) */
+  --row-hover: #1c2027;    /* hovered table rows */
+  --phase-done: var(--primary);
+  --phase-current: var(--accent);
+  --phase-todo: #292e38;
+  --phase-done-hold: #4a5160;
+  --phase-current-hold: #6f7789;
 
-  --chart-dot: #5b8def;
-  --chart-line: #3a3d43;
+  --chart-dot: #78a6e8;
+  --chart-halo: rgb(120 166 232 / 0.16);
+  --chart-line: #4a5160;   /* stem */
+  --ring: rgb(236 238 243 / 0.08);
 
-  --avatar-teal-bg: #183a31;   --avatar-teal-fg: #7fe8c8;
-  --avatar-violet-bg: #2c2545; --avatar-violet-fg: #c9bfff;
-  --avatar-amber-bg: #41261b;  --avatar-amber-fg: #ff9f7a;
-  --avatar-blue-bg: #1d2d40;   --avatar-blue-fg: #a9cff5;
+  --avatar-teal-bg: rgb(60 191 146 / 0.14);   --avatar-teal-fg: #6fd8b1;
+  --avatar-violet-bg: rgb(167 139 250 / 0.15); --avatar-violet-fg: #c4b5fd;
+  --avatar-amber-bg: rgb(240 106 63 / 0.15);   --avatar-amber-fg: #ff9b78;
+  --avatar-blue-bg: rgb(120 166 232 / 0.15);   --avatar-blue-fg: #9cc0f2;
 
-  --overlay: rgb(3 4 5 / 0.7);
-  --shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  --ghost: rgb(255 255 255 / 0.02); /* fill of dashed empty states */
+  --overlay: rgb(0 0 0 / 0.55);
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.35);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg-page: #f2f2f3;
+  --bg-page: #e7e9ee;
   --bg-sidebar: #ffffff;
   --bg-card: #ffffff;
-  --bg-input: #f3f4f5;
-  --bg-hover: #eef0f2;
-  --bg-selected: #e6e8eb;
-  --bg-bubble: #f1f2f4;
-  --bg-raised: #f6f7f8;
-  --card-border: #e7e8eb;
+  --bg-input: #f3f4f7;
+  --bg-hover: #f3f4f7;
+  --bg-selected: #eceef2;
+  --bg-bubble: #f3f4f7;
+  --bg-raised: #f9fafb;
+  --card-border: transparent;
 
-  --border: #e2e4e8;
-  --border-row: #eceef1;
-  --border-sidebar: #eceef1;
-  --border-dashed: #d2d5da;
+  --border: #d9dce3;
+  --border-row: #e8eaef;
+  --border-sidebar: #e8eaef;
+  --border-dashed: #d9dce3;
 
-  --text-strong: #111214;
-  --text: #1c1e21;
-  --text-body: #2d3034;
-  --text-soft: #3d4045;
-  --text-secondary: #5b5f66;
-  --text-muted: #73777f;
-  --text-faint: #979ba2;
+  --text-strong: #1e2230;
+  --text: #1e2230;
+  --text-body: #2b3040;
+  --text-soft: #444a5a;
+  --text-secondary: #5f6575;
+  --text-muted: #868c99;
+  --text-faint: #9ba1ad;
 
-  --primary: #16171a;
+  --primary: #2c3249;      /* navy: primary actions, active states */
   --primary-on: #ffffff;
-  --primary-hover: #000000;
+  --primary-hover: #3a4160;
 
-  --accent: #ea5a24;
+  --accent: #e8592f;
   --accent-on: #ffffff;
-  --accent-light: #c94a18;
-  --accent-tint: #fde9e0;
-  --accent-tint-text: #9a3410;
+  --accent-light: #c4461d;
+  --accent-tint: #fdece5;
+  --accent-tint-text: #c4461d;
 
-  --success: #1f9d5c;
-  --success-tint: #def5e8;
-  --success-text: #137a45;
-  --info: #2f6fe0;
-  --info-tint: #e3ecfc;
-  --info-text: #2459b8;
+  --success: #2f9e7a;
+  --success-tint: #e3f4ed;
+  --success-text: #23795d;
+  --info: #5b8fd6;
+  --info-tint: #e6eefa;
+  --info-text: #3e6fb3;
 
-  --decision-bg: #eef8f2;
-  --decision-border: #c8e8d5;
-  --decision-divider: #d9efe2;
-  --decision-meta: #3f8a62;
+  --decision-bg: #f0f8f4;
+  --decision-border: #cfe9dd;
+  --decision-divider: #e0f1e8;
+  --decision-meta: #23795d;
 
-  --danger: #d6402f;
-  --danger-border: #f2c3bc;
-  --danger-outline: #fde5e1;
+  --danger: #c4461d;
+  --danger-border: #f4c4b3;
+  --danger-outline: #fdece5;
 
-  --warning: #94600f;
-  --warning-strong: #b7791f;
-  --warning-tint: #fbefd6;
-  --warning-banner-bg: #fdf6e7;
-  --warning-banner-border: #f0dcae;
+  --warning: #9a6a0c;
+  --warning-strong: #f59e0b;
+  --warning-tint: #fbf1dc;
+  --warning-banner-bg: #fdf7ea;
+  --warning-banner-border: #f1deb0;
 
-  --phase-todo: #e3e5e9;
-  --phase-done-hold: #a3a7ae;
-  --phase-current-hold: #c4c7cc;
+  --todo: #9aa3b5;
+  --amber: #c98a12;
+  --card-hover: #fcfcfd;
+  --row-hover: #fafbfc;
+  --phase-todo: #eceef2;
+  --phase-done-hold: #b6bcc7;
+  --phase-current-hold: #cfd3db;
 
-  --chart-dot: #2f6fe0;
-  --chart-line: #d2d5da;
+  --chart-dot: #5b8fd6;
+  --chart-halo: rgb(91 143 214 / 0.16);
+  --chart-line: #c4c9d3;
+  --ring: rgb(44 50 73 / 0.08);
 
-  --avatar-teal-bg: #d6f3ea;   --avatar-teal-fg: #12775b;
-  --avatar-violet-bg: #e7e1fb; --avatar-violet-fg: #5b45c4;
-  --avatar-amber-bg: #fde3d6;  --avatar-amber-fg: #b44a1c;
-  --avatar-blue-bg: #dce8f8;   --avatar-blue-fg: #2c5f9e;
+  --avatar-teal-bg: #e3f4ed;   --avatar-teal-fg: #23795d;
+  --avatar-violet-bg: #ede9fb; --avatar-violet-fg: #5b45c4;
+  --avatar-amber-bg: #fdece5;  --avatar-amber-fg: #c4461d;
+  --avatar-blue-bg: #e6eefa;   --avatar-blue-fg: #3e6fb3;
 
-  --overlay: rgb(17 18 20 / 0.35);
-  --shadow: 0 12px 32px rgb(17 18 20 / 0.12);
+  --ghost: rgb(255 255 255 / 0.55);
+  --overlay: rgb(30 34 48 / 0.28);
+  --shadow: 0 12px 32px rgb(30 34 48 / 0.12);
   color-scheme: light;
 }
 
@@ -163,6 +180,12 @@
   --color-bubble: var(--bg-bubble);
   --color-raised: var(--bg-raised);
   --color-card-line: var(--card-border);
+  --color-todo: var(--todo);
+  --color-amber: var(--amber);
+  --color-card-hover: var(--card-hover);
+  --color-row-hover: var(--row-hover);
+  --color-ring: var(--ring);
+  --color-chart-line: var(--chart-line);
 
   --color-line: var(--border);
   --color-row: var(--border-row);
@@ -209,10 +232,19 @@
   --color-warning-bg: var(--warning-banner-bg);
   --color-warning-line: var(--warning-banner-border);
 
-  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-inter), -apple-system, sans-serif;
 
   --shadow-pop: var(--shadow);
+
+  /* The prototype never sets line heights: text uses the font's normal spacing everywhere. */
+  --text-xs--line-height: normal;
+  --text-sm--line-height: normal;
+  --text-base--line-height: normal;
+  --text-lg--line-height: normal;
+  --text-xl--line-height: normal;
+  --text-2xl--line-height: normal;
+  --text-3xl--line-height: normal;
 }
 
 /* Base styles live in the base layer so Tailwind utilities can override them. */
@@ -226,7 +258,8 @@
   body {
     font-family: var(--font-sans);
     font-size: 14px;
-    line-height: 1.5;
+    line-height: normal;
+    font-feature-settings: "cv11", "ss01";
   }
 
   a {
@@ -238,17 +271,24 @@
     accent-color: var(--accent);
   }
 
-  input[type="date"]::-webkit-calendar-picker-indicator {
+  /* Date pickers: our own calendar icon in the theme's text colour. Browsers draw the built-in
+     one differently depending on color-scheme, which left it invisible on dark cards. */
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     cursor: pointer;
+    width: 16px;
+    height: 16px;
+    background: var(--text-secondary);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='3'/%3E%3Cpath d='M8 2v4M16 2v4M3 10h18'/%3E%3C/svg%3E") center / 16px no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='17' rx='3'/%3E%3Cpath d='M8 2v4M16 2v4M3 10h18'/%3E%3C/svg%3E") center / 16px no-repeat;
   }
-  :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator,
-  :root:not([data-theme="light"]) input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    background: var(--text-strong);
   }
 
   ::selection {
     background: var(--accent-tint);
-    color: var(--accent-tint-text);
   }
 
   :focus-visible {
@@ -276,11 +316,21 @@
 .avatar-amber { background: var(--avatar-amber-bg); color: var(--avatar-amber-fg); }
 .avatar-blue { background: var(--avatar-blue-bg); color: var(--avatar-blue-fg); }
 
-/* The striped fill of the Overview's completion bar. */
+/* The Overview's completion bar: diagonal primary stripes that slide in. */
 .bar-stripes {
-  background-color: var(--text-strong);
-  background-image: repeating-linear-gradient(115deg, transparent 0 10px, var(--bg-card) 10px 11.5px);
+  background: repeating-linear-gradient(-45deg, var(--primary) 0 6px, var(--primary-hover) 6px 12px);
+  animation: mk-fill 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
+@keyframes mk-fill { from { width: 0; } }
+
+/* Weekly progress: today's column fades in from the top; stems are gradient lines that grow in. */
+.lolli-today { background: linear-gradient(to bottom, transparent 0%, var(--bg-input) 45%, var(--bg-selected) 100%); }
+.lolli-stem {
+  background: linear-gradient(to top, var(--border), var(--chart-line));
+  animation: mk-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.lolli-today .lolli-stem { background: var(--primary); }
+@keyframes mk-grow { from { height: 0; } }
 
 /* Hover-revealed row actions stay visible on touch screens. */
 .reveal { opacity: 0; }
@@ -300,4 +350,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+/* While the theme switches, every colour changes in the same frame (no half-light, half-dark flash). */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
