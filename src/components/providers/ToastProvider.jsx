@@ -6,7 +6,7 @@ import { cx } from "@/components/ui/primitives";
 
 const ToastContext = createContext(null);
 const ICONS = { success: CheckCircle2, error: AlertCircle, info: Info };
-const TONES = { success: "text-accent", error: "text-danger", info: "text-muted" };
+const TONES = { success: "text-success", error: "text-danger", info: "text-muted" };
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -41,7 +41,7 @@ export function ToastProvider({ children }) {
             <div
               key={t.id}
               role={t.type === "error" ? "alert" : "status"}
-              className="animate-pop-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-[10px] border border-line bg-card px-3.5 py-3 shadow-2xl shadow-black/50"
+              className="animate-pop-in pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl border border-line bg-card px-4 py-3 shadow-pop"
             >
               <Icon className={cx("mt-0.5 size-4 shrink-0", TONES[t.type])} aria-hidden />
               <div className="min-w-0 flex-1">

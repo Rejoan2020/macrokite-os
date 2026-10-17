@@ -1,5 +1,13 @@
 import { FORMER_MEMBER, TEAM_CHANNEL } from "./constants";
 
+/** Where a conversation opens: DMs by the other person, groups and the team chat by id, project chats on their project. */
+export function conversationHref(conversation, userId) {
+  if (conversation.type === "dm") return `/inbox/${conversation.memberIds.find((id) => id !== userId) ?? userId}`;
+  if (conversation.type === "project") return `/projects/${conversation.projectId}`;
+  if (conversation.type === "task") return `/tasks/${conversation.taskId}`;
+  return `/inbox/${conversation._id}`;
+}
+
 /**
  * What a notification says and where it leads, from the current snapshot. Pure, shared by the
  * notification list and the tests. Returns { actorId, text, detail, href }, or null when what it
@@ -21,11 +29,10 @@ export function describeNotification(n, data) {
       const verb = n.type === "mention" ? "mentioned you on" : "commented on";
       return { actorId, text: `${userName(actorId)} ${verb} “${task.title}”`, detail, href: `/tasks/${task._id}` };
     }
-    if (n.type === "dm") return { actorId, text: `${userName(actorId)} sent you a message`, detail, href: `/messages/${actorId}` };
+    if (n.type === "dm") return { actorId, text: `${userName(actorId)} sent you a message`, detail, href: `/inbox/${actorId}` };
     const project = conversation.type === "project" ? byId("projects", conversation.projectId) : null;
-    const place = conversation.type === "general" ? TEAM_CHANNEL : project ? `# ${project.name}` : "a message";
-    const href = conversation.type === "general" ? "/general" : project ? `/projects/${project._id}?tab=chat` : `/messages/${actorId}`;
-    return { actorId, text: `${userName(actorId)} mentioned you in ${place}`, detail, href };
+    const place = conversation.type === "general" ? TEAM_CHANNEL : conversation.type === "group" ? conversation.name : project ? `# ${project.name}` : "a message";
+    return { actorId, text: `${userName(actorId)} mentioned you in ${place}`, detail, href: conversationHref(conversation, n.userId) };
   }
 
   if (n.targetType === "task") {

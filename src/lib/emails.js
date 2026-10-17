@@ -1,4 +1,4 @@
-import { DEFAULT_NOTIFICATION_PREFS, FORMER_MEMBER, TASK_PRIORITY_LABELS, taskPriority } from "./constants";
+import { DEFAULT_NOTIFICATION_PREFS, FORMER_MEMBER, TASK_PRIORITY_LABELS, taskAssigneeIds, taskPriority } from "./constants";
 import { formatShortDate } from "./format";
 
 /**
@@ -63,7 +63,7 @@ export function notificationEmails({ state, changes, action, actorId, now, appUr
     const tasks = state.tasks.filter((t) => t.meetingId === summary._id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const items = [
       ...summary.decisions.map((d) => `Decision: ${d.text}`),
-      ...tasks.map((t) => `Action item: ${t.title} (${users[t.assigneeId]?.name || FORMER_MEMBER}${t.dueDate ? `, due ${formatShortDate(t.dueDate)}` : ""})`),
+      ...tasks.map((t) => `Action item: ${t.title} (${taskAssigneeIds(t).map((id) => users[id]?.name || FORMER_MEMBER).join(", ") || "Unassigned"}${t.dueDate ? `, due ${formatShortDate(t.dueDate)}` : ""})`),
     ];
     for (const id of summary.attendeeIds) {
       const user = users[id];
@@ -113,7 +113,7 @@ function buildNotification(n, { state, byId, actorName, appUrl, timeZone }) {
       return { subject: `${actorName} invited you to ${meeting.title}`, body: { intro: `${actorName} invited you to a meeting: ${meeting.title}`, items, button: { label: "Open the meeting", href } } };
     }
     // Action items from a meeting, for an assignee who wasn't sent the summary.
-    const mine = state.tasks.filter((t) => t.meetingId === meeting._id && t.assigneeId === n.userId).map((t) => t.title);
+    const mine = state.tasks.filter((t) => t.meetingId === meeting._id && taskAssigneeIds(t).includes(n.userId)).map((t) => t.title);
     const subject = n.text || `Action items from ${meeting.title}`;
     return { subject, body: { intro: `${subject}.`, items: mine, button: { label: "Open the meeting", href } } };
   }

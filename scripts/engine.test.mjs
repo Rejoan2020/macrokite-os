@@ -8,6 +8,8 @@ import { mentionHandle, mentionSuggestions, parseActionItem, parseDay, parseMent
 import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember, renamedCompanyProject } from "../src/lib/membership.js";
 import { notificationEmails } from "../src/lib/emails.js";
 import { myNotifications } from "../src/lib/notifications.js";
+import { COMPANY_PROJECT } from "../src/lib/constants.js";
+import { normalizeSnapshot } from "../src/lib/compat.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -42,7 +44,7 @@ const today = todayISO();
 test("seed is consistent", () => {
   const ids = new Set(state.projects.map((p) => p._id));
   assert.equal(state.projects.filter((p) => p.isInternal).length, 1, "exactly one Internal project");
-  assert.ok(state.tasks.every((t) => ids.has(t.projectId) && t.assigneeId), "every task has a project and assignee");
+  assert.ok(state.tasks.every((t) => ids.has(t.projectId) && t.assigneeIds.length), "every task has a project and assignee");
   assert.ok(state.projects.every((p) => state.conversations.some((c) => c.type === "project" && c.projectId === p._id)), "every project has a channel");
   const unread = unreadByConversation(state, SEED_OWNER_ID);
   assert.equal(unread.cnv_general.count, 4);
@@ -72,13 +74,13 @@ test("projects: create with channel, advance phase, hold, archive", () => {
 
 test("tasks: defaults, toggle, assignment notifications", () => {
   fails({ type: "task.create", data: { title: "No project" } }, (e) => assert.ok(e.fieldErrors.projectId));
-  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeId: "usr_nobody" } }, (e) => assert.ok(e.fieldErrors.assigneeId));
+  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeIds: ["usr_nobody"] } }, (e) => assert.ok(e.fieldErrors.assigneeIds));
   const mine = run({ type: "task.create", data: { title: "Mine", projectId: project._id } });
-  assert.equal(mine.assigneeId, SEED_OWNER_ID, "assignee defaults to me");
+  assert.deepEqual(mine.assigneeIds, [SEED_OWNER_ID], "assignee defaults to me");
   assert.equal(mine.phase, "planning", "phase defaults to the project's phase");
   assert.equal(mine.status, "todo");
   const before = state.notifications.length;
-  const theirs = run({ type: "task.create", data: { title: "Theirs", projectId: project._id, assigneeId: "usr_sara", dueDate: "2000-01-01" } });
+  const theirs = run({ type: "task.create", data: { title: "Theirs", projectId: project._id, assigneeIds: ["usr_sara"], dueDate: "2000-01-01" } });
   assert.equal(state.notifications.length, before + 1);
   assert.equal(state.notifications.at(-1).userId, "usr_sara");
   run({ type: "task.toggle", id: theirs._id, data: { done: true } });
@@ -109,8 +111,8 @@ test("meetings: agenda, decisions, action items, end notifies once per person", 
   assert.equal(state.meetings.find((m) => m._id === meeting._id).decisions.length, 1);
 
   const notesBefore = state.notifications.length;
-  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "A", assigneeId: "usr_sara" } });
-  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "B", assigneeId: "usr_sara" } });
+  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "A", assigneeIds: ["usr_sara"] } });
+  run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "B", assigneeIds: ["usr_sara"] } });
   run({ type: "task.create", data: { projectId: project._id, meetingId: meeting._id, title: "C" } });
   assert.equal(state.notifications.length, notesBefore, "action items are announced when the meeting ends");
   assert.ok(state.tasks.filter((t) => t.meetingId === meeting._id).every((t) => t.source === "meeting"));
@@ -162,7 +164,7 @@ test("team: admin-only invites, roles and deactivation", () => {
   fails({ type: "member.role", id: SEED_OWNER_ID, data: { role: "member" } });
   assert.equal(run({ type: "member.role", id: "usr_sara", data: { role: "admin" } }).role, "admin");
   run({ type: "member.active", id: "usr_nadia", data: { active: false } });
-  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeId: "usr_nadia" } });
+  fails({ type: "task.create", data: { title: "X", projectId: project._id, assigneeIds: ["usr_nadia"] } });
   fails({ type: "dm.send", data: { userId: "usr_alex", body: "hi" } }, (e) => assert.equal(e.status, 403), as("usr_nadia"));
   run({ type: "member.active", id: "usr_nadia", data: { active: true } });
   run({ type: "member.role", id: "usr_sara", data: { role: "member" } });
@@ -218,12 +220,12 @@ test("notification list: who, what, where, and mark all read", () => {
   };
   const before = myNotifications(inbox, "usr_sara").length;
   act({ type: "message.create", id: "cnv_jajabor", data: { body: "@Sara review please" } });
-  act({ type: "task.create", data: { title: "Fix login", projectId: "prj_jajabor", assigneeId: "usr_sara" } });
+  act({ type: "task.create", data: { title: "Fix login", projectId: "prj_jajabor", assigneeIds: ["usr_sara"] } });
   const mine = myNotifications(inbox, "usr_sara");
   assert.equal(mine.length, before + 2);
   assert.deepEqual(mine[0].view, { actorId: "usr_alex", text: "Alex Morgan assigned you a task", detail: "Fix login", href: `/tasks/${mine[0].targetId}` }, "newest first");
   assert.equal(mine[1].view.text, "Alex Morgan mentioned you in # Jajabor");
-  assert.equal(mine[1].view.href, "/projects/prj_jajabor?tab=chat");
+  assert.equal(mine[1].view.href, "/projects/prj_jajabor");
   assert.equal(mine[0].actorId, "usr_alex", "notifications record who caused them");
 
   assert.ok(mine.some((n) => !n.readAt));
@@ -235,14 +237,14 @@ test("notification list: who, what, where, and mark all read", () => {
 test("task permissions: project leads and admins manage tasks, the assignee only moves status", () => {
   // Jajabor: Sara (member) leads it; Tanvir is a member; Alex is an admin; Nadia isn't in the project.
   const forbidden = (e) => assert.equal(e.status, 403);
-  fails({ type: "task.create", data: { title: "Self-assigned", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, forbidden, as("usr_tanvir"));
-  fails({ type: "task.create", data: { title: "Elsewhere", projectId: "prj_storefront", assigneeId: "usr_sara" } }, forbidden, as("usr_sara"));
-  const task = run({ type: "task.create", data: { title: "Draft copy", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, as("usr_sara"));
+  fails({ type: "task.create", data: { title: "Self-assigned", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"] } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.create", data: { title: "Elsewhere", projectId: "prj_storefront", assigneeIds: ["usr_sara"] } }, forbidden, as("usr_sara"));
+  const task = run({ type: "task.create", data: { title: "Draft copy", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"] } }, as("usr_sara"));
   fails({ type: "task.update", id: task._id, data: { projectId: "prj_storefront" } }, forbidden, as("usr_sara"));
 
   fails({ type: "task.update", id: task._id, data: { title: "Renamed" } }, forbidden, as("usr_tanvir"));
   fails({ type: "task.update", id: task._id, data: { dueDate: today } }, forbidden, as("usr_tanvir"));
-  fails({ type: "task.update", id: task._id, data: { assigneeId: "usr_sara" } }, forbidden, as("usr_tanvir"));
+  fails({ type: "task.update", id: task._id, data: { assigneeIds: ["usr_sara"] } }, forbidden, as("usr_tanvir"));
   fails({ type: "task.update", id: task._id, data: { priority: "high" } }, forbidden, as("usr_tanvir"));
   fails({ type: "task.update", id: task._id, data: { description: "Rewritten" } }, forbidden, as("usr_tanvir"));
   assert.equal(task.description, "", "the description is optional");
@@ -277,8 +279,8 @@ test("task permissions: project leads and admins manage tasks, the assignee only
   assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, ["usr_sara"], "saving without leads keeps them");
   run({ type: "project.update", id: "prj_jajabor", data: { leadIds: ["usr_tanvir", "usr_nadia"] } });
   assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, ["usr_tanvir"], "only members can lead");
-  run({ type: "task.create", data: { title: "Now I can", projectId: "prj_jajabor", assigneeId: "usr_sara" } }, as("usr_tanvir"));
-  fails({ type: "task.create", data: { title: "Not any more", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }, forbidden, as("usr_sara"));
+  run({ type: "task.create", data: { title: "Now I can", projectId: "prj_jajabor", assigneeIds: ["usr_sara"] } }, as("usr_tanvir"));
+  fails({ type: "task.create", data: { title: "Not any more", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"] } }, forbidden, as("usr_sara"));
   run({ type: "project.update", id: "prj_jajabor", data: { memberIds: ["usr_alex", "usr_sara"] } });
   assert.deepEqual(state.projects.find((p) => p._id === "prj_jajabor").leadIds, [], "leaving the project ends being a lead");
   run({ type: "project.update", id: "prj_jajabor", data: { memberIds: ["usr_alex", "usr_sara", "usr_tanvir"], leadIds: ["usr_sara"] } });
@@ -314,7 +316,7 @@ test("custom phases: each project has its own, admins edit them safely", () => {
   assert.deepEqual(run({ type: "project.create", data: { name: "Standard" } }).phases.map((p) => p._id), ["idea", "planning", "design", "build", "test", "launch", "maintain"], "the standard seven by default");
 
   // Tasks use the project's phases.
-  const task = run({ type: "task.create", data: { title: "Hero copy", projectId: site._id, assigneeId: "usr_sara" } }, as("usr_sara"));
+  const task = run({ type: "task.create", data: { title: "Hero copy", projectId: site._id, assigneeIds: ["usr_sara"] } }, as("usr_sara"));
   assert.equal(task.phase, brief._id, "defaults to the project's phase");
   fails({ type: "task.create", data: { title: "Wrong", projectId: site._id, phase: "design" } }, (e) => assert.ok(e.fieldErrors.phase));
   assert.equal(run({ type: "task.update", id: task._id, data: { phase: content._id } }, as("usr_sara")).phase, content._id);
@@ -343,7 +345,7 @@ test("custom phases: each project has its own, admins edit them safely", () => {
 
 test("task discussions: comments notify followers and are removed with the task", () => {
   // Alex creates a task for Tanvir in Jajabor (members: Alex, Sara, Tanvir).
-  const task = run({ type: "task.create", data: { title: "Payment webhook", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } });
+  const task = run({ type: "task.create", data: { title: "Payment webhook", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"] } });
   const notes = (userId) => state.notifications.filter((n) => n.userId === userId && n.type === "taskComment");
 
   const first = run({ type: "task.comment", id: task._id, data: { body: "Blocked: no sandbox keys yet" } }, as("usr_tanvir"));
@@ -399,7 +401,7 @@ test("mention suggestions and picked names resolve to the right person", () => {
 test("deleting a member keeps history as Former member, and a new invite brings them back", () => {
   const nadia = state.users.find((u) => u._id === "usr_nadia");
   const project = state.projects.find((p) => p.memberIds.includes("usr_nadia"));
-  const task = run({ type: "task.create", data: { title: "Hand over notes", projectId: project._id, assigneeId: "usr_nadia" } });
+  const task = run({ type: "task.create", data: { title: "Hand over notes", projectId: project._id, assigneeIds: ["usr_nadia"] } });
   fails({ type: "member.delete", id: "usr_nadia" }, (e) => assert.match(e.message, /Remove this member/));
   run({ type: "member.active", id: "usr_nadia", data: { active: false } });
   fails({ type: "member.delete", id: "usr_nadia" }, (e) => assert.equal(e.status, 403), as("usr_sara"));
@@ -412,7 +414,7 @@ test("deleting a member keeps history as Former member, and a new invite brings 
   assert.ok(deleted.deletedAt);
   assert.ok(!state.projects.some((p) => p.memberIds.includes("usr_nadia")), "leaves every project");
   assert.ok(!state.notifications.some((n) => n.userId === "usr_nadia"));
-  assert.equal(state.tasks.find((t) => t._id === task._id).assigneeId, "usr_nadia", "history keeps the same id");
+  assert.equal(state.tasks.find((t) => t._id === task._id).assigneeIds[0], "usr_nadia", "history keeps the same id");
   fails({ type: "member.active", id: "usr_nadia", data: { active: true } }, (e) => assert.match(e.message, /Invite them again/));
   fails({ type: "member.delete", id: "usr_nadia" });
 
@@ -456,8 +458,8 @@ test("an older workspace's Internal project is renamed to Company once", () => {
     { _id: "p1", name: "Internal", isInternal: true },
     { _id: "p2", name: "Internal", isInternal: false },
   ];
-  assert.deepEqual(renamedCompanyProject(projects, new Date()).name, "Company");
-  assert.equal(renamedCompanyProject([{ ...projects[0], name: "Company" }, projects[1]], new Date()), null, "already renamed, and other projects are never touched");
+  assert.deepEqual(renamedCompanyProject(projects, new Date()).name, COMPANY_PROJECT);
+  assert.equal(renamedCompanyProject([{ ...projects[0], name: COMPANY_PROJECT }, projects[1]], new Date()), null, "already renamed, and other projects are never touched");
   assert.equal(renamedCompanyProject([{ ...projects[0], name: "Ops" }], new Date()), null, "a custom name is kept");
 });
 
@@ -501,13 +503,13 @@ test("notification emails follow each person's settings", () => {
   assert.equal(send({ type: "dm.send", data: { userId: "usr_sara", body: "hi" } }).emails.length, 0);
   assert.ok(mail.notifications.some((n) => n.userId === "usr_sara" && n.type === "mention"), "the in-app notification is still there");
 
-  let { emails } = send({ type: "task.create", data: { title: "Fix <b>login</b>", projectId: "prj_jajabor", assigneeId: "usr_tanvir", dueDate: today } });
+  let { emails } = send({ type: "task.create", data: { title: "Fix <b>login</b>", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"], dueDate: today } });
   assert.deepEqual(emails.map((e) => [e.to, e.subject]), [["tanvir@macrokite.dev", "Alex Morgan assigned you: Fix <b>login</b>"]]);
   assert.ok(emails[0].html.includes("Fix &lt;b&gt;login&lt;/b&gt;"), "content is escaped in HTML");
   assert.ok(emails[0].text.includes(`https://app.test/tasks/${mail.tasks.at(-1)._id}`), "links to the task page");
   assert.equal(send({ type: "task.create", data: { title: "Mine", projectId: "prj_jajabor" } }).emails.length, 0, "no email about your own actions");
   setPrefs("usr_tanvir", { assignment: false, meetingInvite: true });
-  assert.equal(send({ type: "task.create", data: { title: "Quiet", projectId: "prj_jajabor", assigneeId: "usr_tanvir" } }).emails.length, 0, "turned off in Settings");
+  assert.equal(send({ type: "task.create", data: { title: "Quiet", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"] } }).emails.length, 0, "turned off in Settings");
   setPrefs("usr_tanvir", { assignment: true, meetingInvite: true });
 
   // Meetings: invite emails, then one summary per attendee instead of action item emails.
@@ -516,11 +518,88 @@ test("notification emails follow each person's settings", () => {
   assert.deepEqual(invites.map((e) => e.to).sort(), ["sara@macrokite.dev", "tanvir@macrokite.dev"]);
   assert.match(invites[0].text, /When: .*GMT\+6/, "meeting time uses the configured time zone");
   send({ type: "decision.add", id: meeting._id, data: { text: "Ship on Friday" } });
-  assert.equal(send({ type: "task.create", data: { title: "Write release notes", projectId: "prj_jajabor", assigneeId: "usr_tanvir", meetingId: meeting._id } }).emails.length, 0, "announced when the meeting ends");
+  assert.equal(send({ type: "task.create", data: { title: "Write release notes", projectId: "prj_jajabor", assigneeIds: ["usr_tanvir"], meetingId: meeting._id } }).emails.length, 0, "announced when the meeting ends");
   ({ emails } = send({ type: "meeting.end", id: meeting._id }));
   assert.deepEqual(emails.map((e) => e.to).sort(), ["alex@macrokite.dev", "sara@macrokite.dev", "tanvir@macrokite.dev"]);
   assert.ok(emails.every((e) => e.subject === "Summary: Sprint review"));
   assert.ok(emails[0].text.includes("Decision: Ship on Friday") && emails[0].text.includes("Action item: Write release notes (Tanvir Karim)"));
+});
+
+test("clients: admins add them, projects belong to one, and a client with projects can't be removed", () => {
+  const forbidden = (e) => assert.equal(e.status, 403);
+  fails({ type: "client.create", data: { name: "Acme" } }, forbidden, as("usr_sara"));
+  fails({ type: "client.create", data: { name: " " } }, (e) => assert.ok(e.fieldErrors.name));
+  const acme = run({ type: "client.create", data: { name: "Acme", description: "Rockets" } });
+  const project = run({ type: "project.create", data: { name: "Acme site", clientId: acme._id } });
+  assert.equal(project.clientId, acme._id);
+  fails({ type: "project.create", data: { name: "Ghost", clientId: "cli_nope" } }, (e) => assert.ok(e.fieldErrors.clientId));
+  fails({ type: "client.delete", id: acme._id });
+  run({ type: "project.update", id: project._id, data: { clientId: null } });
+  assert.equal(state.projects.find((p) => p._id === project._id).clientId, null, "moved to the company");
+  run({ type: "client.update", id: acme._id, data: { name: "Acme Corp" } });
+  run({ type: "client.delete", id: acme._id });
+  assert.ok(!state.clients.some((c) => c._id === acme._id));
+});
+
+test("tasks can have several assignees, or none yet", () => {
+  const task = run({ type: "task.create", data: { title: "Pair on it", projectId: "prj_jajabor", assigneeIds: ["usr_sara", "usr_tanvir"] } });
+  assert.deepEqual(task.assigneeIds, ["usr_sara", "usr_tanvir"]);
+  assert.ok(["usr_sara", "usr_tanvir"].every((id) => state.notifications.some((n) => n.userId === id && n.targetId === task._id)), "each assignee is notified");
+  run({ type: "task.update", id: task._id, data: { status: "doing" } }, as("usr_tanvir"));
+  const before = state.notifications.length;
+  run({ type: "task.update", id: task._id, data: { assigneeIds: ["usr_sara", "usr_tanvir", "usr_alex"] } });
+  assert.equal(state.notifications.length, before, "only people newly added are notified (and not yourself)");
+  const empty = run({ type: "task.create", data: { title: "Someone, someday", projectId: "prj_jajabor", assigneeIds: [] } });
+  assert.deepEqual(empty.assigneeIds, []);
+});
+
+test("tasks saved with a single assignee still work", () => {
+  const legacy = { ...state.tasks.find((t) => t.projectId === "prj_jajabor"), _id: "tsk_legacy", assigneeId: "usr_tanvir" };
+  delete legacy.assigneeIds;
+  const old = { ...state, tasks: [...state.tasks, legacy] };
+  delete old.clients;
+  const upgraded = normalizeSnapshot(old);
+  assert.deepEqual(upgraded.clients, []);
+  assert.deepEqual(upgraded.tasks.find((t) => t._id === "tsk_legacy").assigneeIds, ["usr_tanvir"]);
+  // The engine also accepts the old shape directly.
+  const { result } = applyAction(old, { type: "task.update", id: "tsk_legacy", data: { status: "done" } }, as("usr_tanvir"));
+  assert.deepEqual(result.assigneeIds, ["usr_tanvir"]);
+  assert.ok(!("assigneeId" in result), "saved in the new shape");
+});
+
+test("groups: named chats for the people picked", () => {
+  fails({ type: "group.create", data: { name: "Just me", memberIds: [] } }, (e) => assert.ok(e.fieldErrors.memberIds));
+  const group = run({ type: "group.create", data: { name: "Design crit", memberIds: ["usr_sara"] } });
+  assert.deepEqual([...group.memberIds].sort(), ["usr_alex", "usr_sara"], "whoever starts it is in it");
+  const message = run({ type: "message.create", id: group._id, data: { body: "Friday at 2? @Sara" } });
+  assert.deepEqual(message.mentions, ["usr_sara"]);
+  assert.equal(myNotifications(state, "usr_sara").find((x) => x.targetId === message._id).view.href, `/inbox/${group._id}`);
+  fails({ type: "message.create", id: group._id, data: { body: "Let me in" } }, (e) => assert.equal(e.status, 404), as("usr_tanvir"));
+  fails({ type: "group.update", id: group._id, data: { name: "Mine now" } }, (e) => assert.equal(e.status, 404), as("usr_tanvir"));
+  run({ type: "group.update", id: group._id, data: { name: "Design review", memberIds: [...group.memberIds, "usr_tanvir"] } }, as("usr_sara"));
+  run({ type: "message.create", id: group._id, data: { body: "Thanks for adding me" } }, as("usr_tanvir"));
+});
+
+test("meetings can be scheduled with an agenda, and editing it keeps ticked topics", () => {
+  const startsAt = new Date(Date.now() + 86_400_000).toISOString();
+  const meeting = run({ type: "meeting.create", data: { projectId: "prj_internal", title: "Planning", startsAt, agenda: ["Wins", "", "  Hiring  "] } });
+  assert.deepEqual(meeting.agenda.map((a) => a.title), ["Wins", "Hiring"], "blank lines dropped, lines trimmed");
+  run({ type: "agenda.toggle", id: meeting._id, data: { itemId: meeting.agenda[1]._id } });
+  const edited = run({ type: "meeting.update", id: meeting._id, data: { agenda: ["Hiring", "Budget"] } });
+  assert.deepEqual(edited.agenda.map((a) => [a.title, a.covered]), [["Hiring", true], ["Budget", false]]);
+  assert.equal(edited.agenda[0]._id, meeting.agenda[1]._id, "same topic, same item");
+  const renamed = run({ type: "meeting.update", id: meeting._id, data: { title: "Planning v2" } });
+  assert.equal(renamed.agenda.length, 2, "leaving the agenda out keeps it");
+});
+
+test("meeting reminders are per person", () => {
+  const meeting = state.meetings.find((m) => m._id === "mtg_jaj_today");
+  run({ type: "meeting.reminder", id: meeting._id, data: { minutes: 15 } });
+  run({ type: "meeting.reminder", id: meeting._id, data: { minutes: 60 } }, as("usr_sara"));
+  assert.deepEqual(state.meetings.find((m) => m._id === meeting._id).reminders, { usr_alex: 15, usr_sara: 60 });
+  run({ type: "meeting.reminder", id: meeting._id, data: { minutes: null } });
+  assert.deepEqual(state.meetings.find((m) => m._id === meeting._id).reminders, { usr_sara: 60 }, "turning yours off leaves others alone");
+  fails({ type: "meeting.reminder", id: meeting._id, data: { minutes: 7 } }, (e) => assert.ok(e.fieldErrors.minutes));
 });
 
 console.log("\nall engine checks passed");

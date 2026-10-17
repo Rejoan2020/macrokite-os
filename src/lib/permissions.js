@@ -1,9 +1,11 @@
+import { taskAssigneeIds } from "./constants";
+
 /**
  * Who may change what. Shared by the engine, which enforces it, and the UI, which hides or disables
  * controls people can't use. `user` is the acting member record.
  *
  * Tasks are managed per project: a project's leads (chosen by admins) and admins create, assign,
- * edit and delete its tasks. The assignee can also move a task's status. Everyone can comment.
+ * edit and delete its tasks. Its assignees can also move a task's status. Everyone can comment.
  */
 
 const isAdmin = (user) => Boolean(user?.active && user.role === "admin");
@@ -19,11 +21,11 @@ export const canManageTasks = (project, user) => isAdmin(user) || isProjectLead(
 /** Change a project's details, move it between phases, put it on hold or archive it: its leads and admins. Anyone can edit its notes. */
 export const canManageProject = (project, user) => isAdmin(user) || isProjectLead(project, user);
 
-/** Edit a task's details (title, description, project, phase, assignee, due date, priority) or delete it. */
+/** Edit a task's details (title, description, project, phase, assignees, due date, priority) or delete it. */
 export const canEditTask = (task, user, project) => canManageTasks(project, user);
 
-/** Move a task's status (to do, doing, done): also its assignee. */
-export const canSetTaskStatus = (task, user, project) => canEditTask(task, user, project) || Boolean(user?.active && task.assigneeId === user._id);
+/** Move a task's status (to do, in progress, done): also its assignees. */
+export const canSetTaskStatus = (task, user, project) => canEditTask(task, user, project) || Boolean(user?.active && taskAssigneeIds(task).includes(user._id));
 
 /** Start a new project: admins only. They choose its leads. */
 export const canCreateProject = (user) => isAdmin(user);
@@ -31,8 +33,11 @@ export const canCreateProject = (user) => isAdmin(user);
 /** Define a project's phases: admins only. */
 export const canEditPhases = (user) => isAdmin(user);
 
+/** Add, rename or remove clients: admins only, like starting projects. */
+export const canManageClients = (user) => isAdmin(user);
+
 /** Choose a project's leads: admins only. */
 export const canChooseLeads = (user) => isAdmin(user);
 
 /** Fields only canEditTask may change. */
-export const TASK_DETAIL_FIELDS = ["title", "description", "projectId", "phase", "assigneeId", "dueDate", "priority"];
+export const TASK_DETAIL_FIELDS = ["title", "description", "projectId", "phase", "assigneeIds", "dueDate", "priority"];

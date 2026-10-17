@@ -1,21 +1,25 @@
 import {
+  clientInput,
   fieldErrorsFrom,
+  groupInput,
   inviteInput,
   lineInput,
   meetingInput,
   messageInput,
   profileInput,
   projectInput,
+  reminderInput,
   roleInput,
   taskInput,
   workspaceInput,
 } from "./schemas";
-import { FORMER_MEMBER, taskPriority } from "./constants";
+import { FORMER_MEMBER, taskAssigneeIds, taskPriority } from "./constants";
+import { normalizeTask } from "./compat";
 import { DEFAULT_PHASES, nextPhaseIn, phaseName, projectPhases } from "./phases";
 import { parseMentions } from "./text";
 import { conversationMemberIds, readStateId } from "./selectors";
 import { pluralize } from "./format";
-import { canChooseLeads, canCreateProject, canEditPhases, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
+import { canChooseLeads, canCreateProject, canEditPhases, canManageClients, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
 
 /**
  * The domain engine applies one action to an organization snapshot.
@@ -25,7 +29,7 @@ import { canChooseLeads, canCreateProject, canEditPhases, canManageProject, canE
  * in the browser; database mode persists the changeset to MongoDB. Both modes therefore share the
  * same validation, organization scoping, permissions, reference checks and notifications.
  *
- * Snapshot: { org, users, invites, projects, tasks, meetings, conversations, messages, readStates, notifications }
+ * Snapshot: { org, users, invites, clients, projects, tasks, meetings, conversations, messages, readStates, notifications }
  * Action:   { type, id?, data? }
  * Context:  { orgId, userId, now: Date, newId(prefix) } — always supplied by the trusted runtime,
  *           never by request payloads.
@@ -40,7 +44,7 @@ export class DomainError extends Error {
   }
 }
 
-export const COLLECTIONS = ["users", "invites", "projects", "tasks", "meetings", "conversations", "messages", "readStates", "notifications"];
+export const COLLECTIONS = ["users", "invites", "clients", "projects", "tasks", "meetings", "conversations", "messages", "readStates", "notifications"];
 
 function parse(schema, input) {
   const result = schema.safeParse(input ?? {});
@@ -158,6 +162,15 @@ function findProject(tx, id, field = "projectId") {
   return project;
 }
 
+/** A project's client, checked to exist. Null for company projects. */
+function clientIdFor(tx, clientId) {
+  if (!clientId) return null;
+  if (!tx.state.clients.some((c) => c._id === clientId)) throw new DomainError("Client not found.", { fieldErrors: { clientId: "Choose an existing client" } });
+  return clientId;
+}
+
+const sameList = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
+
 function conversationFor(tx, projectId) {
   return tx.state.conversations.find((c) => c.type === "project" && c.projectId === projectId);
 }
@@ -167,6 +180,16 @@ const taskThreadFor = (tx, taskId) => tx.state.conversations.find((c) => c.type 
 function markRead(tx, conversationId, userId) {
   const _id = readStateId(conversationId, userId);
   tx.put("readStates", { _id, orgId: tx.state.org._id, userId, conversationId, lastReadAt: tx.now });
+}
+
+/** Agenda items from topic lines. A line matching an existing topic keeps it, ticked or not. */
+function agendaFrom(ctx, lines, current = []) {
+  const unused = [...current];
+  return lines.map((title) => {
+    const i = unused.findIndex((item) => item.title === title);
+    if (i !== -1) return unused.splice(i, 1)[0];
+    return { _id: ctx.newId("agd"), title, covered: false };
+  });
 }
 
 function updateMeeting(tx, id, change) {
@@ -235,6 +258,7 @@ const handlers = {
     const leadIds = data?.leadIds ? leadsAmong(input.leadIds, memberIds) : [ctx.userId];
     const project = tx.create("projects", "prj", {
       ...input,
+      clientId: clientIdFor(tx, input.clientId),
       phases,
       phase,
       memberIds,
@@ -265,7 +289,8 @@ const handlers = {
     const phases = data?.phases ? updatedPhases(tx, ctx, current, input) : current.phases;
     const phase = input.phase ?? current.phase;
     requirePhaseOf({ phases }, phase);
-    const project = tx.put("projects", { ...current, ...input, phases, phase, memberIds, leadIds, updatedAt: tx.now });
+    const clientId = (input.clientId ?? null) === (current.clientId ?? null) ? current.clientId ?? null : clientIdFor(tx, input.clientId);
+    const project = tx.put("projects", { ...current, ...input, clientId, phases, phase, memberIds, leadIds, updatedAt: tx.now });
     const conversation = conversationFor(tx, id);
     if (conversation) tx.put("conversations", { ...conversation, memberIds });
     return project;
@@ -289,14 +314,35 @@ const handlers = {
     return tx.put("projects", { ...current, archived: Boolean(data?.archived), updatedAt: tx.now });
   },
 
+  // ---------------------------------------------------------------- clients
+  "client.create"(tx, ctx, { data }) {
+    if (!canManageClients(tx.me())) throw new DomainError("Only admins can add clients.", { status: 403 });
+    const input = parse(clientInput, data);
+    return tx.create("clients", "cli", { ...input, createdBy: ctx.userId, createdAt: tx.now, updatedAt: tx.now });
+  },
+  "client.update"(tx, ctx, { id, data }) {
+    if (!canManageClients(tx.me())) throw new DomainError("Only admins can change clients.", { status: 403 });
+    const current = tx.find("clients", id, "Client");
+    const input = parse(clientInput, { ...current, ...data });
+    return tx.put("clients", { ...current, ...input, updatedAt: tx.now });
+  },
+  "client.delete"(tx, ctx, { id }) {
+    if (!canManageClients(tx.me())) throw new DomainError("Only admins can remove clients.", { status: 403 });
+    tx.find("clients", id, "Client");
+    const left = tx.state.projects.filter((p) => p.clientId === id).length;
+    if (left) throw new DomainError(`This client still has ${pluralize(left, "project")}. Move them to another client or to the company first.`);
+    tx.remove("clients", [id]);
+    return { _id: id };
+  },
+
   // ------------------------------------------------------------------ tasks
   "task.create"(tx, ctx, { data }) {
     const project = data?.projectId ? tx.state.projects.find((p) => p._id === data.projectId) : null;
-    const input = parse(taskInput, { phase: project?.phase, assigneeId: ctx.userId, status: "todo", ...data });
+    const input = parse(taskInput, { phase: project?.phase, assigneeIds: [ctx.userId], status: "todo", ...data });
     const target = findProject(tx, input.projectId);
     requireTaskManager(tx, target);
     requirePhaseOf(target, input.phase);
-    activeUserIds(tx, [input.assigneeId], "assigneeId");
+    activeUserIds(tx, input.assigneeIds, "assigneeIds");
     let meeting = null;
     if (input.meetingId) {
       meeting = tx.find("meetings", input.meetingId, "Meeting");
@@ -312,19 +358,20 @@ const handlers = {
       updatedAt: tx.now,
     });
     // Action items from a running meeting are announced in one batch when the meeting ends.
-    if (!meeting || meeting.endedAt) tx.notify(task.assigneeId, "assignment", "task", task._id);
+    if (!meeting || meeting.endedAt) task.assigneeIds.forEach((userId) => tx.notify(userId, "assignment", "task", task._id));
     return task;
   },
   "task.update"(tx, ctx, { id, data }) {
-    const current = tx.find("tasks", id, "Task");
+    const current = normalizeTask(tx.find("tasks", id, "Task"));
     const input = parse(taskInput, { ...current, ...data });
     const before = { ...current, priority: taskPriority(current) };
-    if (TASK_DETAIL_FIELDS.some((field) => (input[field] ?? "") !== (before[field] ?? ""))) requireTaskEdit(tx, current);
+    const changed = (field) => (Array.isArray(input[field]) ? !sameList(input[field], before[field]) : (input[field] ?? "") !== (before[field] ?? ""));
+    if (TASK_DETAIL_FIELDS.some(changed)) requireTaskEdit(tx, current);
     if (input.projectId !== current.projectId) requireTaskManager(tx, findProject(tx, input.projectId));
     if (input.phase !== current.phase || input.projectId !== current.projectId) requirePhaseOf(findProject(tx, input.projectId), input.phase);
     if (input.status !== current.status) requireTaskStatus(tx, current);
     findProject(tx, input.projectId);
-    activeUserIds(tx, [input.assigneeId], "assigneeId", [current.assigneeId]);
+    activeUserIds(tx, input.assigneeIds, "assigneeIds", current.assigneeIds);
     const task = tx.put("tasks", {
       ...current,
       ...input,
@@ -334,11 +381,11 @@ const handlers = {
       completedAt: input.status === "done" ? current.completedAt ?? tx.now : null,
       updatedAt: tx.now,
     });
-    if (task.assigneeId !== current.assigneeId) tx.notify(task.assigneeId, "assignment", "task", task._id);
+    task.assigneeIds.filter((userId) => !current.assigneeIds.includes(userId)).forEach((userId) => tx.notify(userId, "assignment", "task", task._id));
     return task;
   },
   "task.toggle"(tx, ctx, { id, data }) {
-    const current = tx.find("tasks", id, "Task");
+    const current = normalizeTask(tx.find("tasks", id, "Task"));
     requireTaskStatus(tx, current);
     const done = Boolean(data?.done);
     return tx.put("tasks", { ...current, status: done ? "done" : "todo", completedAt: done ? tx.now : null, updatedAt: tx.now });
@@ -368,7 +415,7 @@ const handlers = {
     const thread = earlier ?? tx.create("conversations", "cnv", { type: "task", projectId: task.projectId, taskId: id, memberIds: [], createdAt: tx.now });
     const commenters = earlier ? tx.state.messages.filter((m) => m.conversationId === earlier._id).map((m) => m.authorId) : [];
     const message = postMessage(tx, ctx, thread, body);
-    const following = new Set([task.assigneeId, task.createdBy, ...commenters]);
+    const following = new Set([...taskAssigneeIds(task), task.createdBy, ...commenters]);
     for (const userId of following) {
       if (!message.mentions.includes(userId)) tx.notify(userId, "taskComment", "message", message._id);
     }
@@ -382,7 +429,7 @@ const handlers = {
     activeUserIds(tx, input.attendeeIds, "attendeeIds");
     const meeting = tx.create("meetings", "mtg", {
       ...input,
-      agenda: [],
+      agenda: agendaFrom(ctx, input.agenda ?? []),
       decisions: [],
       endedAt: null,
       createdBy: ctx.userId,
@@ -394,13 +441,15 @@ const handlers = {
   },
   "meeting.update"(tx, ctx, { id, data }) {
     const current = tx.find("meetings", id, "Meeting");
-    const input = parse(meetingInput, { ...current, ...data });
+    // The saved agenda holds items, not lines, so it only goes through the schema when it's being replaced.
+    const input = parse(meetingInput, { ...current, ...data, agenda: data?.agenda });
     findProject(tx, input.projectId);
     activeUserIds(tx, input.attendeeIds, "attendeeIds", current.attendeeIds);
     if (input.projectId !== current.projectId && tx.state.tasks.some((t) => t.meetingId === id)) {
       throw new DomainError("This meeting already has action items, so its project can’t change.", { fieldErrors: { projectId: "Fixed once action items exist" } });
     }
-    const meeting = tx.put("meetings", { ...current, ...input, updatedAt: tx.now });
+    const agenda = input.agenda ? agendaFrom(ctx, input.agenda, current.agenda) : current.agenda;
+    const meeting = tx.put("meetings", { ...current, ...input, agenda, updatedAt: tx.now });
     input.attendeeIds
       .filter((userId) => !current.attendeeIds.includes(userId))
       .forEach((userId) => tx.notify(userId, "meetingInvite", "meeting", id));
@@ -409,9 +458,19 @@ const handlers = {
   "meeting.delete"(tx, ctx, { id }) {
     tx.find("meetings", id, "Meeting");
     // Action items stay as ordinary tasks.
-    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) tx.put("tasks", { ...task, meetingId: null, updatedAt: tx.now });
+    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) tx.put("tasks", { ...normalizeTask(task), meetingId: null, updatedAt: tx.now });
     tx.remove("meetings", [id]);
     return { _id: id };
+  },
+  /** Sets or clears the current user's own reminder. Everyone keeps their own; nobody else is affected. */
+  "meeting.reminder"(tx, ctx, { id, data }) {
+    const { minutes } = parse(reminderInput, data);
+    return updateMeeting(tx, id, (m) => {
+      const reminders = { ...(m.reminders ?? {}) };
+      if (minutes === null) delete reminders[ctx.userId];
+      else reminders[ctx.userId] = minutes;
+      return { reminders };
+    });
   },
   "agenda.add"(tx, ctx, { id, data }) {
     const { text } = parse(lineInput("Topic", 200), data);
@@ -446,7 +505,7 @@ const handlers = {
     if (current.endedAt) throw new DomainError("This meeting has already ended.");
     const meeting = tx.put("meetings", { ...current, endedAt: tx.now, updatedAt: tx.now });
     const byAssignee = {};
-    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) (byAssignee[task.assigneeId] ??= []).push(task);
+    for (const task of tx.state.tasks.filter((t) => t.meetingId === id)) taskAssigneeIds(task).forEach((userId) => (byAssignee[userId] ??= []).push(task));
     let notified = 0;
     for (const [userId, tasks] of Object.entries(byAssignee)) {
       if (userId === ctx.userId) continue;
@@ -470,7 +529,7 @@ const handlers = {
   },
   "message.create"(tx, ctx, { id, data }) {
     const conversation = tx.find("conversations", id, "Conversation");
-    if (conversation.type === "dm" && !conversation.memberIds.includes(ctx.userId)) {
+    if ((conversation.type === "dm" || conversation.type === "group") && !conversation.memberIds.includes(ctx.userId)) {
       throw new DomainError("Conversation not found.", { status: 404 });
     }
     // Task discussions also notify the people following the task.
@@ -487,6 +546,22 @@ const handlers = {
       tx.state.conversations.find((c) => c.type === "dm" && c.memberIds.includes(ctx.userId) && c.memberIds.includes(otherId)) ??
       tx.create("conversations", "cnv", { type: "dm", projectId: null, memberIds: [ctx.userId, otherId], createdAt: tx.now });
     return postMessage(tx, ctx, conversation, body);
+  },
+  /** Starts a named group chat with the people picked. Whoever starts it is always in it. */
+  "group.create"(tx, ctx, { data }) {
+    const input = parse(groupInput, data);
+    const memberIds = activeUserIds(tx, [...new Set([ctx.userId, ...input.memberIds])], "memberIds");
+    if (memberIds.length < 2) throw new DomainError("Add at least one other person.", { fieldErrors: { memberIds: "Pick at least one person" } });
+    return tx.create("conversations", "cnv", { type: "group", name: input.name, projectId: null, memberIds, createdBy: ctx.userId, createdAt: tx.now });
+  },
+  /** Renames a group or changes who's in it: any member may. */
+  "group.update"(tx, ctx, { id, data }) {
+    const current = tx.find("conversations", id, "Group");
+    if (current.type !== "group" || !current.memberIds.includes(ctx.userId)) throw new DomainError("Group not found.", { status: 404 });
+    const input = parse(groupInput, { ...current, ...data });
+    const memberIds = activeUserIds(tx, input.memberIds, "memberIds", current.memberIds);
+    if (!memberIds.length) throw new DomainError("A group needs at least one member.", { fieldErrors: { memberIds: "Pick at least one person" } });
+    return tx.put("conversations", { ...current, name: input.name, memberIds });
   },
   "notification.read"(tx, ctx, { id }) {
     const n = tx.find("notifications", id, "Notification");
@@ -550,6 +625,9 @@ const handlers = {
       const conversation = conversationFor(tx, project._id);
       if (conversation) tx.put("conversations", { ...conversation, memberIds });
     }
+    for (const group of tx.state.conversations.filter((c) => c.type === "group" && c.memberIds.includes(id))) {
+      tx.put("conversations", { ...group, memberIds: group.memberIds.filter((uid) => uid !== id) });
+    }
     tx.remove("notifications", tx.state.notifications.filter((n) => n.userId === id).map((n) => n._id));
     tx.remove("readStates", tx.state.readStates.filter((r) => r.userId === id).map((r) => r._id));
     return tx.put("users", {
@@ -589,7 +667,7 @@ export function applyAction(snapshot, action, ctx) {
   if (!handler) throw new DomainError(`Unknown action “${action?.type}”.`);
   if (!snapshot?.org || snapshot.org._id !== ctx.orgId) throw new DomainError("Workspace not found.", { status: 404 });
   if (!snapshot.users.some((u) => u._id === ctx.userId && u.active)) throw new DomainError("You are not an active member of this workspace.", { status: 403 });
-  const tx = createTx(snapshot, ctx);
+  const tx = createTx({ ...snapshot, clients: snapshot.clients ?? [] }, ctx);
   const result = handler(tx, ctx, { id: action.id, data: action.data ?? {} });
   return { state: tx.state, changes: tx.changes, result };
 }
@@ -600,6 +678,7 @@ export function applyChanges(snapshot, changes) {
   if (changes.org) next.org = changes.org;
   for (const [collection, docs] of Object.entries(changes.put ?? {})) {
     const byId = new Map(docs.map((d) => [d._id, d]));
+    next[collection] ??= [];
     const existing = next[collection].map((d) => byId.get(d._id) ?? d);
     const known = new Set(next[collection].map((d) => d._id));
     next[collection] = [...existing, ...[...byId.values()].filter((d) => !known.has(d._id))];

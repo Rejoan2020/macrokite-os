@@ -1,4 +1,4 @@
-import { TASK_PRIORITIES, taskPriority } from "./constants";
+import { COMPANY_LABEL, TASK_PRIORITIES, taskAssigneeIds, taskPriority } from "./constants";
 import { todayISO, weekBounds } from "./format";
 
 // Derived data. Every count shown in the UI is computed here from the current snapshot.
@@ -13,7 +13,8 @@ export const readStateId = (conversationId, userId) => `${conversationId}:${user
 
 /**
  * Users who belong to a conversation: General is everyone active, project chats follow the project,
- * and a task's discussion is its project's members plus the task's assignee and creator.
+ * a task's discussion is its project's members plus the task's assignees and creator, and DMs and
+ * groups list their members.
  */
 export function conversationMemberIds(conversation, data) {
   if (conversation.type === "general") return data.users.filter((u) => u.active).map((u) => u._id);
@@ -22,7 +23,7 @@ export function conversationMemberIds(conversation, data) {
     const task = data.tasks.find((t) => t._id === conversation.taskId);
     if (!task) return [];
     const project = data.projects.find((p) => p._id === task.projectId);
-    return [...new Set([...(project?.memberIds ?? []), task.assigneeId, task.createdBy])];
+    return [...new Set([...(project?.memberIds ?? []), ...taskAssigneeIds(task), task.createdBy])];
   }
   return conversation.memberIds;
 }
@@ -118,4 +119,31 @@ export function matches(query, ...fields) {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return fields.some((f) => (f ?? "").toLowerCase().includes(q));
+}
+
+/** Who a project is for: its client, or the company. { label, href, clientId }. */
+export function projectOwner(project, clientsById) {
+  const client = project?.clientId ? clientsById[project.clientId] : null;
+  return client ? { label: client.name, href: `/clients/${client._id}`, clientId: client._id } : { label: COMPANY_LABEL, href: "/company", clientId: null };
+}
+
+/** Breadcrumb trail down to a project: Clients / Client / Project, or Company / Project. */
+export function projectTrail(project, clientsById) {
+  const owner = projectOwner(project, clientsById);
+  const head = owner.clientId ? [{ label: "Clients", href: "/clients" }, owner] : [owner];
+  return project ? [...head, { label: project.name, href: `/projects/${project._id}` }] : head;
+}
+
+export const isAssignedTo = (task, userId) => taskAssigneeIds(task).includes(userId);
+
+/** Open first (in progress, then to do), each by due date; done last, most recently finished first. */
+export function sortForList(tasks) {
+  const rank = { doing: 0, todo: 1, done: 2 };
+  return [...tasks].sort(
+    (a, b) =>
+      rank[a.status] - rank[b.status] ||
+      (a.status === "done" ? (b.completedAt ?? "").localeCompare(a.completedAt ?? "") : 0) ||
+      (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
+      priorityRank(a) - priorityRank(b)
+  );
 }

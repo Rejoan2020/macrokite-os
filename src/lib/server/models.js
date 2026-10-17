@@ -50,6 +50,8 @@ export const Invite = model("Invite", { orgId, email: String, invitedBy: String,
   { email: 1, acceptedAt: 1 },
 ]);
 
+export const Client = model("Client", { orgId, name: String, description: String, createdBy: String, ...timestamps });
+
 // A project's own phases, in order. Missing on older projects, which use the standard seven.
 const Phase = new Schema({ _id: String, name: String }, { _id: false });
 
@@ -66,6 +68,7 @@ export const Project = model("Project", {
   leadIds: [String], // create and assign this project's tasks; chosen by admins
   notes: String,
   isInternal: Boolean,
+  clientId: ref, // null: a company project
   createdBy: String,
   ...timestamps,
 });
@@ -78,7 +81,8 @@ export const Task = model(
     phase: String, // one of its project's phase ids
     title: String,
     description: String, // optional; missing on older tasks
-    assigneeId: String,
+    assigneeIds: [String],
+    assigneeId: String, // tasks saved before several assignees; read as assigneeIds
     status: { type: String, enum: TASK_STATUSES },
     priority: { type: String, enum: TASK_PRIORITIES }, // missing on older tasks: treated as medium
     dueDate: String,
@@ -89,7 +93,7 @@ export const Task = model(
     createdBy: String,
     ...timestamps,
   },
-  [{ orgId: 1, projectId: 1 }, { orgId: 1, assigneeId: 1 }]
+  [{ orgId: 1, projectId: 1 }, { orgId: 1, assigneeIds: 1 }]
 );
 
 const AgendaItem = new Schema({ _id: String, title: String, covered: Boolean }, { _id: false });
@@ -107,6 +111,7 @@ export const Meeting = model(
     agenda: [AgendaItem],
     notes: String,
     decisions: [Decision],
+    reminders: { type: Schema.Types.Mixed, default: undefined }, // { [userId]: minutes before }
     endedAt: ref,
     createdBy: String,
     ...timestamps,
@@ -119,7 +124,9 @@ export const Conversation = model("Conversation", {
   type: { type: String, enum: CONVERSATION_TYPES },
   projectId: ref,
   taskId: ref, // for a task's discussion
+  name: String, // for a group
   memberIds: [String],
+  createdBy: String,
   createdAt: String,
 });
 
@@ -150,6 +157,7 @@ export const Notification = model(
 export const COLLECTION_MODELS = {
   users: User,
   invites: Invite,
+  clients: Client,
   projects: Project,
   tasks: Task,
   meetings: Meeting,

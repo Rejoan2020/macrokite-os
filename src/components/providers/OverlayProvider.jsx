@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "./WorkspaceProvider";
-import { InviteDialog, MeetingDialog, ProjectDialog, TaskDialog } from "@/components/forms/Dialogs";
+import { ClientDialog, GroupDialog, InviteDialog, MeetingDialog, ProjectDialog, TaskDialog } from "@/components/forms/Dialogs";
 
 // One place that owns create/edit dialogs so any page can open them.
 const OverlayContext = createContext(null);
@@ -17,13 +17,17 @@ export function OverlayProvider({ children }) {
 
   const api = useMemo(
     () => ({
-      newProject: () => setOverlay({ kind: "project" }),
+      newProject: (defaults) => setOverlay({ kind: "project", defaults }),
       editProject: (id) => setOverlay({ kind: "project", id }),
       newTask: (defaults) => setOverlay({ kind: "task", defaults }),
       editTask: (id) => setOverlay({ kind: "task", id }),
       newMeeting: (defaults) => setOverlay({ kind: "meeting", defaults }),
       editMeeting: (id) => setOverlay({ kind: "meeting", id }),
       invite: () => setOverlay({ kind: "invite" }),
+      newClient: () => setOverlay({ kind: "client" }),
+      editClient: (id) => setOverlay({ kind: "client", id }),
+      newGroup: () => setOverlay({ kind: "group" }),
+      editGroup: (id) => setOverlay({ kind: "group", id }),
     }),
     []
   );
@@ -38,6 +42,7 @@ export function OverlayProvider({ children }) {
       <ProjectDialog
         open={isOpen("project", "projects")}
         project={record("projects")}
+        defaults={overlay?.defaults}
         onClose={close}
         onSaved={(project) => !overlay?.id && router.push(`/projects/${project._id}`)}
       />
@@ -53,6 +58,16 @@ export function OverlayProvider({ children }) {
         }}
       />
       <InviteDialog open={overlay?.kind === "invite"} onClose={close} />
+      <ClientDialog
+        open={isOpen("client", "clients")}
+        client={record("clients")}
+        onClose={close}
+        onSaved={(client) => {
+          if (!client) router.push("/clients");
+          else if (!overlay?.id) router.push(`/clients/${client._id}`);
+        }}
+      />
+      <GroupDialog open={isOpen("group", "conversations")} group={record("conversations")} onClose={close} />
     </OverlayContext.Provider>
   );
 }
