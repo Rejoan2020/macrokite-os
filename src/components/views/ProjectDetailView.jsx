@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Pencil, Plus } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
@@ -12,8 +12,8 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Avatar, Breadcrumbs, Button, cx, EmptyNote, EmptyState, OnHoldPill, Page, Pill } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
 import { formatShortDate, todayISO } from "@/lib/format";
-import { canManageProject } from "@/lib/permissions";
-import { isPastDeadline, projectTrail } from "@/lib/selectors";
+import { canCreateProject, canManageProject } from "@/lib/permissions";
+import { isPastDeadline, projectOwner, projectTrail } from "@/lib/selectors";
 
 /** One labelled fact in the project's details card: Deadline / Nov 5. */
 function Fact({ label, children }) {
@@ -29,9 +29,11 @@ export function ProjectDetailView() {
   const { id } = useParams();
   const { data, lookup, currentUser } = useWorkspace();
   const overlays = useOverlays();
+  const router = useRouter();
   const { canManage } = useTaskManagement();
   const { run, busy } = useAction();
   const [archiving, setArchiving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const project = lookup.projects[id];
 
   if (!project) {
@@ -48,9 +50,15 @@ export function ProjectDetailView() {
   const members = project.memberIds.map((uid) => lookup.users[uid]).filter(Boolean);
   const manageProject = canManageProject(project, currentUser);
   const late = isPastDeadline(project, today) && !project.archived;
+  const canDelete = canCreateProject(currentUser) && !project.isInternal;
 
   const archive = async () => {
     if (await run({ type: "project.archive", id, data: { archived: true } }, { success: "Project archived" })) setArchiving(false);
+  };
+
+  const remove = async () => {
+    const back = projectOwner(project, lookup.clients).href;
+    if (await run({ type: "project.delete", id }, { success: "Project deleted" })) router.push(back);
   };
 
   return (
@@ -67,19 +75,20 @@ export function ProjectDetailView() {
             <p className="mt-2 text-sm text-secondary">{project.description || "No description"}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2.5">
-            {manageProject && (
+            {(manageProject || canDelete) && (
               <ActionMenu
                 label="Project actions"
                 items={[
-                  {
+                  manageProject && {
                     label: project.onHold ? "Resume project" : "Put on hold",
                     onClick: () => run({ type: "project.hold", id, data: { onHold: !project.onHold } }, { success: project.onHold ? "Project resumed" : "Project put on hold" }),
                   },
-                  !project.isInternal && {
+                  manageProject && !project.isInternal && {
                     label: project.archived ? "Unarchive" : "Archive",
                     tone: project.archived ? undefined : "danger",
                     onClick: () => (project.archived ? run({ type: "project.archive", id, data: { archived: false } }, { success: "Project unarchived" }) : setArchiving(true)),
                   },
+                  canDelete && { label: "Delete", tone: "danger", onClick: () => setDeleting(true) },
                 ].filter(Boolean)}
               />
             )}
@@ -141,6 +150,17 @@ export function ProjectDetailView() {
         title="Archive this project?"
         description="It moves to the archived projects at the bottom of the list. Its tasks are kept, and you can unarchive it any time."
         confirmLabel="Archive"
+      />
+
+      <ConfirmDialog
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        onConfirm={remove}
+        busy={busy}
+        tone="danger"
+        title="Delete this project?"
+        description={`${project.name} is removed for good, along with its tasks, meetings and chat. This can’t be undone. Archive it instead to keep its history.`}
+        confirmLabel="Delete project"
       />
     </Page>
   );

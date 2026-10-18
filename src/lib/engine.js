@@ -340,6 +340,25 @@ const handlers = {
     if (current.isInternal) throw new DomainError("The company-wide project can’t be archived.");
     return tx.put("projects", { ...current, archived: Boolean(data?.archived), updatedAt: tx.now });
   },
+  "project.delete"(tx, ctx, { id }) {
+    const current = tx.find("projects", id, "Project");
+    if (!canCreateProject(tx.me())) throw new DomainError("Only admins can delete projects.", { status: 403 });
+    if (current.isInternal) throw new DomainError("The company-wide project can’t be deleted.");
+    // Its tasks, meetings and every chat in it (project chat and task threads) go with it.
+    const taskIds = new Set(tx.state.tasks.filter((t) => t.projectId === id).map((t) => t._id));
+    const meetingIds = new Set(tx.state.meetings.filter((m) => m.projectId === id).map((m) => m._id));
+    const conversationIds = new Set(tx.state.conversations.filter((c) => c.projectId === id || taskIds.has(c.taskId)).map((c) => c._id));
+    const messageIds = new Set(tx.state.messages.filter((m) => conversationIds.has(m.conversationId)).map((m) => m._id));
+    const gone = { task: taskIds, meeting: meetingIds, message: messageIds };
+    tx.remove("notifications", tx.state.notifications.filter((n) => gone[n.targetType]?.has(n.targetId) || (n.targetType === "project" && n.targetId === id)).map((n) => n._id));
+    tx.remove("readStates", tx.state.readStates.filter((r) => conversationIds.has(r.conversationId)).map((r) => r._id));
+    tx.remove("messages", [...messageIds]);
+    tx.remove("conversations", [...conversationIds]);
+    tx.remove("meetings", [...meetingIds]);
+    tx.remove("tasks", [...taskIds]);
+    tx.remove("projects", [id]);
+    return { _id: id };
+  },
 
   // ---------------------------------------------------------------- clients
   "client.create"(tx, ctx, { data }) {

@@ -630,4 +630,19 @@ test("clients have members, and groups can be deleted", () => {
   assert.ok(!state.conversations.some((c) => c._id === group._id) && !state.messages.some((m) => m.conversationId === group._id));
 });
 
+test("deleting a project removes its tasks, meetings and chats; admins only", () => {
+  const id = "prj_jajabor";
+  const taskIds = state.tasks.filter((t) => t.projectId === id).map((t) => t._id);
+  const conversationIds = state.conversations.filter((c) => c.projectId === id).map((c) => c._id);
+  assert.ok(taskIds.length && conversationIds.length && state.meetings.some((m) => m.projectId === id));
+  fails({ type: "project.delete", id }, (e) => assert.equal(e.status, 403), as("usr_sara"));
+  fails({ type: "project.delete", id: "prj_internal" });
+  run({ type: "project.delete", id });
+  assert.ok(!state.projects.some((p) => p._id === id));
+  assert.ok(!state.tasks.some((t) => t.projectId === id) && !state.meetings.some((m) => m.projectId === id));
+  assert.ok(!state.conversations.some((c) => c.projectId === id || taskIds.includes(c.taskId)));
+  assert.ok(!state.messages.some((m) => conversationIds.includes(m.conversationId)));
+  assert.ok(!state.readStates.some((r) => conversationIds.includes(r.conversationId)));
+});
+
 console.log("\nall engine checks passed");
