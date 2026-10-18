@@ -84,24 +84,91 @@ const PLATFORM_ICONS = {
   ),
 };
 
-function postTitle(url) {
+function postTitle({ platform, url }) {
   try {
     const { pathname } = new URL(url);
-    if (/\/(p|reel|reels)\//.test(pathname)) return pathname.includes("/reel") ? "Instagram reel" : "Instagram post";
-    if (/\/(videos|watch)/.test(pathname)) return "Facebook video";
+    if (platform === "Instagram") return pathname.includes("/reel") ? "Instagram reel" : "Instagram post";
+    if (/\/(videos|watch|reel)/.test(pathname) || new URL(url).hostname === "fb.watch") return "Facebook video";
     return "Facebook post";
   } catch {
     return "Post";
   }
 }
 
-/** Facebook / Instagram links as cards. No embeds: the card always works. */
+// One request per link per page load, shared by every message that repeats it.
+const previews = new Map();
+
+function loadPreview(url) {
+  if (!previews.has(url)) {
+    previews.set(
+      url,
+      fetch(`/api/link-preview?url=${encodeURIComponent(url)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null)
+    );
+  }
+  return previews.get(url);
+}
+
+function usePreview(url) {
+  const [preview, setPreview] = useState(null);
+  useEffect(() => {
+    let live = true;
+    loadPreview(url).then((p) => live && setPreview(p));
+    return () => {
+      live = false;
+    };
+  }, [url]);
+  return preview;
+}
+
+/** Facebook / Instagram links as cards: the post's photo and caption when the post shares them. */
 export function LinkCards({ body }) {
   const links = socialLinks(body);
   if (!links.length) return null;
-  return links.map((link) => (
+  return links.map((link) => <LinkCard key={link.url} link={link} />);
+}
+
+function LinkCard({ link }) {
+  const preview = usePreview(link.url);
+  const [broken, setBroken] = useState(false);
+
+  if (preview && !broken) {
+    return (
+      <a href={link.url} target="_blank" rel="noopener noreferrer" className="group/card mt-0.5 flex w-[360px] max-w-full flex-col overflow-hidden rounded-[18px] border border-row bg-card">
+        <span className="relative block bg-input">
+          <img
+            src={preview.image}
+            alt={preview.title}
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            onError={() => setBroken(true)}
+            className="block max-h-[360px] w-full object-cover transition-opacity group-hover/card:opacity-90"
+          />
+          {preview.video && (
+            <span aria-hidden className="absolute inset-0 grid place-items-center">
+              <span className="grid size-12 place-items-center rounded-full bg-black/55 text-white">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5.5v13l11-6.5z" />
+                </svg>
+              </span>
+            </span>
+          )}
+        </span>
+        <span className="flex min-w-0 flex-col gap-1 px-3.5 pt-3 pb-3.5">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">
+            <span className="[&>svg]:size-3.5">{PLATFORM_ICONS[link.platform]}</span>
+            {link.platform}
+          </span>
+          {preview.title && <span className="line-clamp-2 text-sm font-semibold text-fg">{preview.title}</span>}
+          {preview.description && <span className="line-clamp-2 text-xs text-secondary">{preview.description}</span>}
+        </span>
+      </a>
+    );
+  }
+
+  return (
     <a
-      key={link.url}
       href={link.url}
       target="_blank"
       rel="noopener noreferrer"
@@ -112,11 +179,11 @@ export function LinkCards({ body }) {
       </span>
       <span className="flex min-w-0 flex-col">
         <span className="text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">{link.platform}</span>
-        <span className="mt-[3px] truncate font-semibold text-fg">{postTitle(link.url)}</span>
+        <span className="mt-[3px] truncate font-semibold text-fg">{postTitle(link)}</span>
         <span className="mt-1.5 text-xs font-medium text-accent">Open post</span>
       </span>
     </a>
-  ));
+  );
 }
 
 /**
