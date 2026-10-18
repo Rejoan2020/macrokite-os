@@ -113,8 +113,8 @@ function Shell({ children }) {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[70] focus:rounded-full focus:bg-accent focus:px-4 focus:py-2 focus:text-accent-on">
         Skip to content
       </a>
-      <div className="sticky top-0 hidden h-dvh w-[250px] shrink-0 py-[14px] pl-[14px] lg:block">
-        <aside className="h-full overflow-hidden rounded-[24px] border border-card-line bg-sidebar">
+      <div className="sticky top-0 z-40 hidden h-dvh w-[250px] shrink-0 py-[14px] pl-[14px] lg:block">
+        <aside className="h-full rounded-[24px] border border-card-line bg-sidebar">
           <Sidebar />
         </aside>
       </div>
