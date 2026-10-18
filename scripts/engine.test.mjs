@@ -174,6 +174,15 @@ test("workspace + profile; foreign org rejected", () => {
   fails({ type: "workspace.update", data: { name: "" } });
   fails({ type: "workspace.update", data: { name: "X" } }, (e) => assert.equal(e.status, 403), as("usr_sara"));
   run({ type: "workspace.update", data: { name: "Macrokite Studio" } });
+  // The drop-in call link saves on its own and keeps the name; only full links are accepted.
+  run({ type: "workspace.update", data: { callUrl: "https://meet.google.com/abc-defg-hij" } });
+  assert.equal(state.org.name, "Macrokite Studio");
+  assert.equal(state.org.callUrl, "https://meet.google.com/abc-defg-hij");
+  fails({ type: "workspace.update", data: { callUrl: "meet.google.com/x" } }, (e) => assert.ok(e.fieldErrors.callUrl));
+  fails({ type: "workspace.update", data: { callUrl: "https://x.com" } }, (e) => assert.equal(e.status, 403), as("usr_sara"));
+  run({ type: "workspace.update", data: { name: "Macrokite Studio 2" } });
+  assert.equal(state.org.callUrl, "https://meet.google.com/abc-defg-hij", "renaming keeps the link");
+  run({ type: "workspace.update", data: { name: "Macrokite Studio" } });
   assert.equal(state.org.name, "Macrokite Studio");
   run({ type: "profile.update", data: { name: "Alex M.", notificationPrefs: { assignment: false, meetingInvite: true } } });
   const me = state.users.find((u) => u._id === SEED_OWNER_ID);

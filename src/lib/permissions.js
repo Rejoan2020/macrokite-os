@@ -36,6 +36,9 @@ export const canEditPhases = (user) => isAdmin(user);
 /** Add, rename or remove clients: admins only, like starting projects. */
 export const canManageClients = (user) => isAdmin(user);
 
+/** The workspace's name and its drop-in call link. */
+export const canEditWorkspace = (user) => isAdmin(user);
+
 /** Choose a project's leads: admins only. */
 export const canChooseLeads = (user) => isAdmin(user);
 

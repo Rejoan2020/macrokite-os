@@ -1,14 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Video } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { Countdown, CopyLinkButton, ReminderMenu, shortLink } from "@/components/meetings/MeetingBits";
+import { Input } from "@/components/ui/form";
 import { PeoplePicker, peopleOrder } from "@/components/ui/PeoplePicker";
 import { Button, Card, cx, EmptyNote, IconButton, Page, PageHeader, SectionLabel } from "@/components/ui/primitives";
 import { useAction } from "@/lib/client/useAction";
 import { formatDay, formatShortDate, formatTime, parseDate, pluralize, todayISO } from "@/lib/format";
+import { canEditWorkspace } from "@/lib/permissions";
 import { actionItems, meetingBuckets } from "@/lib/selectors";
 
 export function MeetingsView() {
@@ -30,6 +33,7 @@ export function MeetingsView() {
 
       {/* The heading sits 24px above the first card; cards are 14px apart. */}
       <div aria-hidden className="h-2.5" />
+      <DropInCall />
       {!upcoming.length && !past.length && <EmptyNote>No meetings yet. Schedule one to keep agenda, notes, decisions and action items together.</EmptyNote>}
       {!upcoming.length && past.length > 0 && <EmptyNote>Nothing scheduled. Press New meeting to plan the next one.</EmptyNote>}
 
@@ -50,6 +54,102 @@ export function MeetingsView() {
         </section>
       )}
     </Page>
+  );
+}
+
+/** Link, Copy and Join for a call link, as on each meeting card. */
+function CallLinkRow({ url }) {
+  return (
+    <>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={url}
+        className="flex h-[52px] min-w-0 flex-1 items-center overflow-hidden rounded-[14px] bg-raised px-[18px] text-sm whitespace-nowrap text-secondary hover:text-fg"
+      >
+        <span className="truncate">{shortLink(url)}</span>
+      </a>
+      <CopyLinkButton url={url} className="h-[52px] px-[18px]" />
+      <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex h-[52px] shrink-0 items-center rounded-full border border-accent bg-accent px-[26px] text-sm font-medium text-white hover:brightness-[1.08]">
+        Join
+      </a>
+    </>
+  );
+}
+
+/**
+ * The workspace's standing call room, for quick calls nobody scheduled. The link never changes, so
+ * people can bookmark it; admins set it here.
+ */
+function DropInCall() {
+  const { data, currentUser } = useWorkspace();
+  const { run, busy, fieldErrors } = useAction();
+  const url = data.org.callUrl ?? "";
+  const canEdit = canEditWorkspace(currentUser);
+  const [draft, setDraft] = useState(null);
+  if (!url && !canEdit) return null;
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (await run({ type: "workspace.update", data: { callUrl: draft } }, { success: draft.trim() ? "Drop-in link saved" : "Drop-in link removed" })) setDraft(null);
+  };
+
+  return (
+    <Card as="section" aria-labelledby="m-dropin" className="px-6 py-[18px]">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent-tint-text">
+            <Video className="size-[18px]" />
+          </span>
+          <div className="min-w-0">
+            <h2 id="m-dropin" className="text-[15px] font-medium text-strong">
+              Drop-in call
+            </h2>
+            <p className="text-xs text-faint">One fixed link for quick, unscheduled calls. Anyone on the team can join any time.</p>
+          </div>
+        </div>
+        {canEdit && url && draft === null && <IconButton icon={Pencil} outline label="Change drop-in link" onClick={() => setDraft(url)} className="[&_svg]:size-[15px]" />}
+      </header>
+
+      {draft !== null ? (
+        <form onSubmit={save} className="mt-4 flex flex-wrap items-start gap-2" noValidate>
+          <div className="min-w-0 flex-[1_1_260px]">
+            <Input
+              type="url"
+              inputMode="url"
+              aria-label="Drop-in call link"
+              aria-invalid={fieldErrors.callUrl ? true : undefined}
+              placeholder="https://meet.google.com/..."
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              autoFocus
+            />
+            {fieldErrors.callUrl && (
+              <p className="mt-[7px] text-xs text-danger" role="alert">
+                {fieldErrors.callUrl}
+              </p>
+            )}
+          </div>
+          <Button size="lg" onClick={() => setDraft(null)}>
+            Cancel
+          </Button>
+          <Button size="lg" variant="primary" type="submit" loading={busy}>
+            Save
+          </Button>
+        </form>
+      ) : url ? (
+        <div className="mt-4 flex gap-2">
+          <CallLinkRow url={url} />
+        </div>
+      ) : (
+        <div className="mt-4">
+          <Button icon={Plus} onClick={() => setDraft("")}>
+            Add a link
+          </Button>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -109,21 +209,7 @@ function MeetingCard({ meeting }) {
 
       <div className="mt-[18px] flex gap-2 border-t border-row pt-4">
         {meeting.callUrl ? (
-          <>
-            <a
-              href={meeting.callUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={meeting.callUrl}
-              className="flex h-[52px] min-w-0 flex-1 items-center overflow-hidden rounded-[14px] bg-raised px-[18px] text-sm whitespace-nowrap text-secondary hover:text-fg"
-            >
-              <span className="truncate">{shortLink(meeting.callUrl)}</span>
-            </a>
-            <CopyLinkButton url={meeting.callUrl} className="h-[52px] px-[18px]" />
-            <a href={meeting.callUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-[52px] shrink-0 items-center rounded-full border border-accent bg-accent px-[26px] text-sm font-medium text-white hover:brightness-[1.08]">
-              Join
-            </a>
-          </>
+          <CallLinkRow url={meeting.callUrl} />
         ) : (
           <span className="text-xs text-faint">No call link</span>
         )}

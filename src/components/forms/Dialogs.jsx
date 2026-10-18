@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/primitives";
 import { PrioritySelect } from "@/components/ui/Menus";
 import { PeoplePicker, peopleOrder } from "@/components/ui/PeoplePicker";
 import { Dialog } from "@/components/ui/Dialog";
+import { DateTimePicker } from "@/components/ui/DateTimePicker";
 import { Field, Input, Select, Textarea } from "@/components/ui/form";
 import { COMPANY_LABEL, DEFAULT_TASK_PRIORITY, TASK_STATUSES, TASK_STATUS_LABELS, taskAssigneeIds, taskPriority } from "@/lib/constants";
 import { projectPhases } from "@/lib/phases";
@@ -295,7 +296,7 @@ function MeetingForm({ meeting, defaults = {}, onClose, onSaved }) {
             {(p) => <Input {...p} value={values.title} onChange={set("title")} placeholder="Weekly sync" data-autofocus autoComplete="off" />}
           </Field>
           <Field label="Starts" error={fieldErrors.startsAt}>
-            {(p) => <Input {...p} type="datetime-local" value={values.startsAt} onChange={set("startsAt")} />}
+            {(p) => <DateTimePicker {...p} value={values.startsAt} onChange={(startsAt) => setValues((v) => ({ ...v, startsAt }))} />}
           </Field>
         </div>
         <Field label="Agenda" error={agendaError}>

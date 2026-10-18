@@ -22,6 +22,7 @@ function model(name, definition, indexes = []) {
 
 export const Organization = model("Organization", {
   name: String,
+  callUrl: String,
   slug: { type: String, unique: true },
   schemaVersion: Number,
   ...timestamps,

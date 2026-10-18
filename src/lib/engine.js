@@ -711,7 +711,8 @@ const handlers = {
   // ------------------------------------------------------ workspace/profile
   "workspace.update"(tx, ctx, { data }) {
     requireAdmin(tx);
-    const input = parse(workspaceInput, data);
+    // Either setting can be saved on its own; the other keeps its value.
+    const input = parse(workspaceInput, { name: tx.state.org.name, callUrl: tx.state.org.callUrl, ...data });
     return tx.put("org", { ...tx.state.org, ...input, updatedAt: tx.now });
   },
   "profile.update"(tx, ctx, { data }) {

@@ -117,7 +117,8 @@ export const inviteInput = z.object({
 
 export const roleInput = z.object({ role: z.enum(ROLES, { message: "Choose a role" }) });
 
-export const workspaceInput = z.object({ name: required("Workspace name", 80) });
+// callUrl: the workspace's standing call room, for meetings nobody scheduled.
+export const workspaceInput = z.object({ name: required("Workspace name", 80), callUrl: httpUrl("Call link") });
 
 export const profileInput = z.object({
   name: required("Name", 80),
