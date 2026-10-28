@@ -5,6 +5,7 @@ import {
   inviteInput,
   lineInput,
   meetingInput,
+  messageEditInput,
   messageInput,
   profileInput,
   projectInput,
@@ -17,9 +18,10 @@ import { FORMER_MEMBER, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, taskAssigneeId
 import { normalizeTask } from "./compat";
 import { DEFAULT_PHASES, nextPhaseIn, phaseName, projectPhases } from "./phases";
 import { parseMentions } from "./text";
+import { attachmentFolder } from "./attachments";
 import { conversationMemberIds, readStateId } from "./selectors";
 import { formatShortDate, pluralize } from "./format";
-import { canChooseLeads, canCreateProject, canEditPhases, canManageClients, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
+import { canChooseLeads, canCreateProject, canDeleteMessage, canEditMessage, canEditPhases, canManageClients, canManageProject, canEditTask, canManageTasks, canSetTaskStatus, projectLeadIds, TASK_DETAIL_FIELDS } from "./permissions";
 
 /**
  * The domain engine applies one action to an organization snapshot.
@@ -228,13 +230,23 @@ function logTaskChanges(tx, ctx, before, after) {
   }
 }
 
-function postMessage(tx, ctx, conversation, body) {
+/** The people @mentioned in a message: active members of its conversation, never the author. */
+function mentionsIn(tx, ctx, conversation, body) {
   const members = tx.state.users.filter((u) => conversationMemberIds(conversation, tx.state).includes(u._id) && u.active);
-  const mentions = parseMentions(body, members).filter((id) => id !== ctx.userId);
+  return parseMentions(body, members).filter((id) => id !== ctx.userId);
+}
+
+function postMessage(tx, ctx, conversation, { body, attachments }) {
+  const folder = attachmentFolder(ctx.orgId);
+  if (attachments.some((a) => !a.pathname.startsWith(folder) || a.pathname.includes(".."))) {
+    throw new DomainError("A file couldn’t be attached. Upload it again.", { fieldErrors: { attachments: "Upload the file again" } });
+  }
+  const mentions = mentionsIn(tx, ctx, conversation, body);
   const message = tx.create("messages", "msg", {
     conversationId: conversation._id,
     authorId: ctx.userId,
     body,
+    attachments,
     mentions,
     editedAt: null,
     deletedAt: null,
@@ -461,11 +473,11 @@ const handlers = {
    */
   "task.comment"(tx, ctx, { id, data }) {
     const task = tx.find("tasks", id, "Task");
-    const { body } = parse(messageInput, data);
+    const input = parse(messageInput, data);
     const earlier = taskThreadFor(tx, id);
     const thread = earlier ?? taskThread(tx, task);
     const commenters = earlier ? tx.state.messages.filter((m) => m.conversationId === earlier._id && !m.event).map((m) => m.authorId) : [];
-    const message = postMessage(tx, ctx, thread, body);
+    const message = postMessage(tx, ctx, thread, input);
     const following = new Set([...taskAssigneeIds(task), task.createdBy, ...commenters]);
     for (const userId of following) {
       if (!message.mentions.includes(userId)) tx.notify(userId, "taskComment", "message", message._id);
@@ -585,18 +597,50 @@ const handlers = {
     }
     // Task discussions also notify the people following the task.
     if (conversation.type === "task") return handlers["task.comment"](tx, ctx, { id: conversation.taskId, data });
-    const { body } = parse(messageInput, data);
-    return postMessage(tx, ctx, conversation, body);
+    return postMessage(tx, ctx, conversation, parse(messageInput, data));
+  },
+  /**
+   * Changes a message's text: its author only. Its files stay. People newly @mentioned are notified;
+   * those no longer mentioned lose that notification.
+   */
+  "message.edit"(tx, ctx, { id, data }) {
+    const message = tx.find("messages", id, "Message");
+    const conversation = tx.find("conversations", message.conversationId, "Conversation");
+    const hidden = (conversation.type === "dm" || conversation.type === "group") && !conversation.memberIds.includes(ctx.userId);
+    if (hidden || message.deletedAt) throw new DomainError("Message not found.", { status: 404 });
+    if (!canEditMessage(message, tx.me())) throw new DomainError("You can only edit your own messages.", { status: 403 });
+    const { body } = parse(messageEditInput, data);
+    if (!body && !(message.attachments ?? []).length) throw new DomainError("Please fix the highlighted fields.", { fieldErrors: { body: "Message is required" } });
+    if (body === message.body) return message;
+    const mentions = mentionsIn(tx, ctx, conversation, body);
+    const before = message.mentions ?? [];
+    tx.remove("notifications", tx.state.notifications.filter((n) => n.type === "mention" && n.targetId === id && !mentions.includes(n.userId)).map((n) => n._id));
+    const edited = tx.put("messages", { ...message, body, mentions, editedAt: tx.now });
+    mentions.filter((userId) => !before.includes(userId)).forEach((userId) => tx.notify(userId, "mention", "message", id));
+    return edited;
+  },
+  /**
+   * Deletes a message: its author or an admin. The record stays, emptied and marked deleted, so a
+   * task made from it still resolves; notifications about it go, and its files are removed from storage.
+   */
+  "message.delete"(tx, ctx, { id }) {
+    const message = tx.find("messages", id, "Message");
+    const conversation = tx.find("conversations", message.conversationId, "Conversation");
+    const hidden = (conversation.type === "dm" || conversation.type === "group") && !conversation.memberIds.includes(ctx.userId);
+    if (hidden || message.deletedAt) throw new DomainError("Message not found.", { status: 404 });
+    if (!canDeleteMessage(message, tx.me())) throw new DomainError("You can only delete your own messages.", { status: 403 });
+    tx.remove("notifications", tx.state.notifications.filter((n) => n.targetType === "message" && n.targetId === id).map((n) => n._id));
+    return tx.put("messages", { ...message, body: "", attachments: [], mentions: [], deletedAt: tx.now });
   },
   "dm.send"(tx, ctx, { data }) {
-    const { body } = parse(messageInput, data);
+    const input = parse(messageInput, data);
     const otherId = data?.userId;
     if (otherId === ctx.userId) throw new DomainError("You can’t message yourself.");
     activeUserIds(tx, [otherId], "userId");
     const conversation =
       tx.state.conversations.find((c) => c.type === "dm" && c.memberIds.includes(ctx.userId) && c.memberIds.includes(otherId)) ??
       tx.create("conversations", "cnv", { type: "dm", projectId: null, memberIds: [ctx.userId, otherId], createdAt: tx.now });
-    return postMessage(tx, ctx, conversation, body);
+    return postMessage(tx, ctx, conversation, input);
   },
   /** Starts a named group chat with the people picked. Whoever starts it is always in it. */
   "group.create"(tx, ctx, { data }) {

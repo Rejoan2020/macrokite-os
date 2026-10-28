@@ -314,7 +314,7 @@ function Activity({ task }) {
 
   const memberIds = conversationMemberIds(thread ?? { type: "task", taskId: task._id }, data);
   const people = memberIds.map((uid) => lookup.users[uid]).filter((u) => u?.active && u._id !== currentUserId);
-  const send = async (body) => Boolean(await run({ type: "task.comment", id: task._id, data: { body } }));
+  const send = async (body, attachments) => Boolean(await run({ type: "task.comment", id: task._id, data: { body, attachments } }));
 
   return (
     <section aria-labelledby="t-activity" className="flex min-h-[480px] min-w-0 flex-col overflow-hidden rounded-[24px] border border-card-line bg-card lg:min-h-0 lg:w-[clamp(320px,34%,440px)] lg:shrink-0">

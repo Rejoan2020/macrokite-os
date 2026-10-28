@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_TASK_PRIORITY, REMINDER_OPTIONS, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
+import { DEFAULT_TASK_PRIORITY, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, REMINDER_OPTIONS, ROLES, TASK_PRIORITIES, TASK_SOURCES, TASK_STATUSES } from "./constants";
 import { MAX_PHASES } from "./phases";
 
 // Input schemas shared by demo mode (browser) and database mode (route handlers).
@@ -109,7 +109,26 @@ export const reminderInput = z.object({
 
 export const lineInput = (label, max = 300) => z.object({ text: required(label, max) });
 
-export const messageInput = z.object({ body: required("Message", 10000) });
+// A file already uploaded to Blob storage; the engine checks it is in this workspace's folder.
+const attachment = z.object({
+  pathname: z.string().trim().min(1).max(400),
+  name: required("File name", 200),
+  size: z.number().int().min(0).max(MAX_ATTACHMENT_BYTES, "Files must be 25 MB or smaller"),
+  contentType: text(150).default(""),
+  width: z.number().int().positive().max(100000).nullish().transform((v) => v ?? null),
+  height: z.number().int().positive().max(100000).nullish().transform((v) => v ?? null),
+});
+
+// Text, files or both.
+export const messageInput = z
+  .object({
+    body: text(10000).default(""),
+    attachments: z.array(attachment).max(MAX_ATTACHMENTS, `Send ${MAX_ATTACHMENTS} files or fewer at a time`).default([]),
+  })
+  .refine((m) => m.body || m.attachments.length, { message: "Message is required", path: ["body"] });
+
+// New text for a sent message; its files stay as they are.
+export const messageEditInput = z.object({ body: text(10000).default("") });
 
 export const inviteInput = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address")),

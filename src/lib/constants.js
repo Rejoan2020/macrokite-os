@@ -38,6 +38,10 @@ export const NOTIFICATION_PREFS = [
 ];
 export const DEFAULT_NOTIFICATION_PREFS = { assignment: true, meetingInvite: true };
 
+// Files sent in chat: the size limit per file and how many go in one message.
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 10;
+
 // The team-wide chat (conversation type "general"). Listed in the Inbox with the groups.
 export const TEAM_CHANNEL = "Everyone";
 

@@ -12,6 +12,7 @@ import { ActionMenu } from "@/components/ui/ActionMenu";
 import { Avatar, AvatarStack, Button, cx, LogoTile } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/Dialog";
 import { useAction } from "@/lib/client/useAction";
+import { messagePreview } from "@/lib/attachments";
 import { FORMER_MEMBER, TEAM_CHANNEL } from "@/lib/constants";
 import { firstName, formatStamp, pluralize } from "@/lib/format";
 import { conversationMemberIds, matches } from "@/lib/selectors";
@@ -87,7 +88,7 @@ export function InboxView() {
               selected={conversation._id === id}
               leading={<LogoTile name={groupName(conversation)} size="sm" />}
               name={groupName(conversation)}
-              preview={last ? `${authorLabel(last, lookup, currentUserId)}: ${last.body}` : pluralize(conversation.memberIds.length, "member")}
+              preview={last ? `${authorLabel(last, lookup, currentUserId)}: ${messagePreview(last)}` : pluralize(conversation.memberIds.length, "member")}
               last={last}
               count={count}
             />
@@ -101,7 +102,7 @@ export function InboxView() {
               selected={user._id === id}
               leading={<Avatar user={user} size="row" />}
               name={user.name}
-              preview={last ? `${authorLabel(last, lookup, currentUserId)}: ${last.body}` : "No messages yet"}
+              preview={last ? `${authorLabel(last, lookup, currentUserId)}: ${messagePreview(last)}` : "No messages yet"}
               last={last}
               count={count}
             />
@@ -205,7 +206,7 @@ function DirectConversation({ other }) {
   const createTask = useTaskFromMessage();
   useMarkRead(conversation?._id);
 
-  const send = async (body) => Boolean(await run({ type: "dm.send", data: { userId: other._id, body } }));
+  const send = async (body, attachments) => Boolean(await run({ type: "dm.send", data: { userId: other._id, body, attachments } }));
 
   return (
     <section aria-label={`Conversation with ${other.name}`} className={conversationCard}>

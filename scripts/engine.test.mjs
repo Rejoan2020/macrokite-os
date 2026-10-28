@@ -8,7 +8,8 @@ import { mentionHandle, mentionSuggestions, parseActionItem, parseDay, parseMent
 import { canCreateWorkspace, matchMembers, newWorkspace, pickMembership, rejoinedMember, renamedCompanyProject } from "../src/lib/membership.js";
 import { notificationEmails } from "../src/lib/emails.js";
 import { myNotifications } from "../src/lib/notifications.js";
-import { COMPANY_PROJECT } from "../src/lib/constants.js";
+import { COMPANY_PROJECT, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../src/lib/constants.js";
+import { attachmentFolder, messagePreview } from "../src/lib/attachments.js";
 import { normalizeSnapshot } from "../src/lib/compat.js";
 
 let n = 0;
@@ -652,6 +653,78 @@ test("deleting a project removes its tasks, meetings and chats; admins only", ()
   assert.ok(!state.conversations.some((c) => c.projectId === id || taskIds.includes(c.taskId)));
   assert.ok(!state.messages.some((m) => conversationIds.includes(m.conversationId)));
   assert.ok(!state.readStates.some((r) => conversationIds.includes(r.conversationId)));
+});
+
+test("messages can carry files from the workspace's own folder", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  const photo = { pathname: `${attachmentFolder(SEED_ORG_ID)}shot-Ab12.png`, name: "shot.png", size: 2048, contentType: "image/png", width: 800, height: 600 };
+  const doc = { pathname: `${attachmentFolder(SEED_ORG_ID)}brief-Cd34.pdf`, name: "brief.pdf", size: 90000, contentType: "application/pdf" };
+
+  const onlyFiles = run({ type: "message.create", id: general._id, data: { attachments: [photo] } });
+  assert.equal(onlyFiles.body, "");
+  assert.deepEqual(onlyFiles.attachments, [photo]);
+  assert.equal(messagePreview(onlyFiles), "Sent a photo");
+  const both = run({ type: "dm.send", data: { userId: "usr_sara", body: "see attached", attachments: [doc] } });
+  assert.equal(both.attachments[0].height, null);
+  assert.equal(messagePreview({ body: "", attachments: [photo, doc] }), "Sent 2 files");
+
+  fails({ type: "message.create", id: general._id, data: { body: "" } }, (e) => assert.ok(e.fieldErrors.body));
+  fails({ type: "message.create", id: general._id, data: { attachments: [{ ...photo, pathname: "orgs/org_other/chat/x.png" }] } }, (e) => assert.ok(e.fieldErrors.attachments));
+  fails({ type: "message.create", id: general._id, data: { attachments: [{ ...photo, pathname: `${attachmentFolder(SEED_ORG_ID)}../x.png` }] } });
+  fails({ type: "message.create", id: general._id, data: { attachments: [{ ...doc, size: MAX_ATTACHMENT_BYTES + 1 }] } });
+  fails({ type: "message.create", id: general._id, data: { attachments: Array.from({ length: MAX_ATTACHMENTS + 1 }, () => photo) } });
+});
+
+test("messages can be deleted by their author or an admin", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  // Earlier checks deactivate some members; use whoever is still active.
+  const [writer, other, third] = state.users.filter((u) => u.active && u.role !== "admin").map((u) => u._id);
+  const file = { pathname: `${attachmentFolder(SEED_ORG_ID)}notes-Ef56.pdf`, name: "notes.pdf", size: 1200, contentType: "application/pdf" };
+  const mine = run({ type: "dm.send", data: { userId: other, body: "see notes", attachments: [file] } }, as(writer));
+  assert.ok(state.notifications.some((x) => x.targetId === mine._id));
+
+  fails({ type: "message.delete", id: mine._id }, (e) => assert.equal(e.status, 403), as(other));
+  const deleted = run({ type: "message.delete", id: mine._id }, as(writer));
+  assert.ok(deleted.deletedAt);
+  assert.equal(deleted.body, "");
+  assert.deepEqual(deleted.attachments, []);
+  assert.ok(!state.notifications.some((x) => x.targetId === mine._id), "its notifications go too");
+  fails({ type: "message.delete", id: mine._id }, (e) => assert.equal(e.status, 404), as(writer));
+
+  // An admin may remove anyone's message, but not a task's logged changes or a DM they aren't in.
+  const theirs = run({ type: "message.create", id: general._id, data: { body: "oops" } }, as(other));
+  run({ type: "message.delete", id: theirs._id });
+  const event = state.messages.find((m) => m.event);
+  fails({ type: "message.delete", id: event._id }, (e) => assert.equal(e.status, 403));
+  const dm = run({ type: "dm.send", data: { userId: third, body: "private" } }, as(other));
+  fails({ type: "message.delete", id: dm._id }, (e) => assert.equal(e.status, 404));
+});
+
+test("messages can be edited by their author", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  const [writer, other] = state.users.filter((u) => u.active && u.role !== "admin");
+  const third = state.users.find((u) => u.active && u !== writer && u !== other);
+  const handle = (u) => `@${mentionHandle(u, state.users.filter((x) => x.active))}`;
+  const message = run({ type: "message.create", id: general._id, data: { body: `hi ${handle(other)}` } }, as(writer._id));
+  const pinged = (userId) => state.notifications.some((n) => n.type === "mention" && n.targetId === message._id && n.userId === userId);
+  assert.ok(pinged(other._id) && !message.editedAt);
+
+  fails({ type: "message.edit", id: message._id, data: { body: "hijacked" } }, (e) => assert.equal(e.status, 403), as(other._id));
+  fails({ type: "message.edit", id: message._id, data: { body: "admins can't reword" } }, (e) => assert.equal(e.status, 403));
+  fails({ type: "message.edit", id: message._id, data: { body: "  " } }, (e) => assert.ok(e.fieldErrors.body), as(writer._id));
+
+  const edited = run({ type: "message.edit", id: message._id, data: { body: `actually ${handle(third)}` } }, as(writer._id));
+  assert.equal(edited.body, `actually ${handle(third)}`);
+  assert.ok(edited.editedAt);
+  assert.deepEqual(edited.mentions, [third._id]);
+  assert.ok(pinged(third._id) && !pinged(other._id), "mentions follow the new text");
+
+  // A message with files may lose its text; a deleted one can't be edited.
+  const file = { pathname: `${attachmentFolder(SEED_ORG_ID)}a-Gh78.png`, name: "a.png", size: 10, contentType: "image/png" };
+  const withFile = run({ type: "message.create", id: general._id, data: { body: "caption", attachments: [file] } }, as(writer._id));
+  assert.equal(run({ type: "message.edit", id: withFile._id, data: { body: "" } }, as(writer._id)).body, "");
+  run({ type: "message.delete", id: withFile._id }, as(writer._id));
+  fails({ type: "message.edit", id: withFile._id, data: { body: "back" } }, (e) => assert.equal(e.status, 404), as(writer._id));
 });
 
 console.log("\nall engine checks passed");

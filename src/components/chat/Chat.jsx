@@ -1,14 +1,16 @@
 "use client";
 
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { ListPlus } from "lucide-react";
+import { ListPlus, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
 import { useAction } from "@/lib/client/useAction";
 import { Avatar, Button, cx, DayDivider } from "@/components/ui/primitives";
 import { firstName, formatDay, formatTime, todayISO } from "@/lib/format";
 import { mentionHandle, mentionSuggestions, socialLinks, tokenize } from "@/lib/text";
-import { canManageTasks } from "@/lib/permissions";
+import { canDeleteMessage, canEditMessage, canManageTasks } from "@/lib/permissions";
+import { ConfirmDialog } from "@/components/ui/Dialog";
+import { MessageAttachments, PendingFiles, useUploads } from "./Attachments";
 
 /** Marks a conversation read whenever it is on screen with unread messages. */
 export function useMarkRead(conversationId) {
@@ -197,7 +199,7 @@ export function useTaskFromMessage(projectId) {
   if (!allowed) return null;
   return (message) =>
     overlays.newTask({
-      title: message.body.replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 200),
+      title: (message.body || (message.attachments ?? []).map((a) => a.name).join(", ")).replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 200),
       messageId: message._id,
       projectId,
     });
@@ -209,12 +211,78 @@ function EventText({ text }) {
 }
 
 /**
+ * Edits a sent message's text in place: Enter saves, Shift+Enter adds a line, Escape cancels.
+ * A message with files may be left without text.
+ */
+function MessageEditor({ message, onDone }) {
+  const { run, busy } = useAction();
+  const [body, setBody] = useState(message.body);
+  const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [body]);
+
+  useEffect(() => {
+    const el = ref.current;
+    el?.focus();
+    el?.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+
+  const text = body.trim();
+  const canSave = Boolean(text || (message.attachments ?? []).length);
+
+  const save = async (e) => {
+    e?.preventDefault();
+    if (!canSave || busy) return;
+    if (text === message.body || (await run({ type: "message.edit", id: message._id, data: { body: text } }))) onDone();
+  };
+
+  return (
+    <form onSubmit={save} className="flex w-full max-w-[560px] flex-col gap-2">
+      <textarea
+        ref={ref}
+        rows={1}
+        value={body}
+        aria-label="Edit message"
+        onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onDone();
+          } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) save(e);
+        }}
+        className="w-full resize-none rounded-[4px_16px_16px_16px] border border-line bg-input px-3.5 py-[9px] text-sm leading-[22px] text-fg outline-none focus:border-accent"
+      />
+      <div className="flex items-center gap-2">
+        <Button size="sm" onClick={onDone} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="primary" size="sm" type="submit" loading={busy} disabled={!canSave}>
+          Save
+        </Button>
+        <span className="text-[11px] text-faint">Enter to save · Esc to cancel</span>
+      </div>
+    </form>
+  );
+}
+
+/**
  * A message: avatar, name, time and the text in a soft bubble. A task's logged changes show as a
- * quiet line instead ("● You changed status from To do to Done").
+ * quiet line instead ("● You changed status from To do to Done"). On hover: create a task from it,
+ * edit it (its author) and delete it (its author or an admin).
  */
 export function ChannelMessage({ message, onCreateTask }) {
-  const { lookup, currentUserId } = useWorkspace();
+  const { lookup, currentUserId, currentUser } = useWorkspace();
+  const { run, busy } = useAction();
+  const [confirming, setConfirming] = useState(false);
+  const [editing, setEditing] = useState(false);
   const author = lookup.users[message.authorId];
+  const canEdit = canEditMessage(message, currentUser);
+  const canDelete = canDeleteMessage(message, currentUser);
   if (message.event) {
     return (
       <div className="-my-0.5 ml-1 flex items-center gap-2.5 text-xs text-faint">
@@ -237,19 +305,73 @@ export function ChannelMessage({ message, onCreateTask }) {
           <time dateTime={message.createdAt} className="text-[11px] text-faint">
             {formatTime(message.createdAt)}
           </time>
+          {message.editedAt && (
+            <span className="text-[11px] text-faint" title={`Edited ${formatDay(message.editedAt)} ${formatTime(message.editedAt)}`}>
+              (edited)
+            </span>
+          )}
         </div>
-        <MessageText body={message.body} className="max-w-full rounded-[4px_16px_16px_16px] bg-input px-3.5 py-[9px] text-sm leading-[22px] text-fg" />
-        <LinkCards body={message.body} />
+        {editing ? (
+          <MessageEditor message={message} onDone={() => setEditing(false)} />
+        ) : (
+          message.body && <MessageText body={message.body} className="max-w-full rounded-[4px_16px_16px_16px] bg-input px-3.5 py-[9px] text-sm leading-[22px] text-fg" />
+        )}
+        <MessageAttachments message={message} />
+        {message.body && <LinkCards body={message.body} />}
       </div>
-      {onCreateTask && (
-        <button
-          type="button"
-          onClick={() => onCreateTask(message)}
-          className="reveal absolute -top-1 right-0 flex h-8 items-center gap-1.5 rounded-full border border-line bg-card px-2.5 text-xs text-secondary transition-opacity hover:text-fg"
-        >
-          <ListPlus className="size-3.5" aria-hidden />
-          Create task
-        </button>
+      {(onCreateTask || canEdit || canDelete) && !editing && (
+        <div className="reveal absolute -top-1 right-0 flex items-center gap-1.5 transition-opacity">
+          {onCreateTask && (
+            <button
+              type="button"
+              onClick={() => onCreateTask(message)}
+              className="flex h-8 items-center gap-1.5 rounded-full border border-line bg-card px-2.5 text-xs text-secondary hover:text-fg"
+            >
+              <ListPlus className="size-3.5" aria-hidden />
+              Create task
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label="Edit message"
+              title="Edit message"
+              className="grid size-8 place-items-center rounded-full border border-line bg-card text-secondary hover:text-fg"
+            >
+              <Pencil className="size-3.5" aria-hidden />
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              aria-label="Delete message"
+              title="Delete message"
+              className="grid size-8 place-items-center rounded-full border border-line bg-card text-secondary hover:text-danger"
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
+      {canDelete && (
+        <ConfirmDialog
+          open={confirming}
+          onClose={() => setConfirming(false)}
+          onConfirm={async () => {
+            if (await run({ type: "message.delete", id: message._id }, { success: "Message deleted" })) setConfirming(false);
+          }}
+          title="Delete this message?"
+          description={
+            message.authorId === currentUserId
+              ? "It’s removed for everyone, along with any files in it. This can’t be undone."
+              : `This removes ${firstName(author?.name ?? "this person")}’s message for everyone, along with any files in it. This can’t be undone.`
+          }
+          confirmLabel="Delete"
+          tone="danger"
+          busy={busy}
+        />
       )}
     </article>
   );
@@ -263,9 +385,16 @@ function mentionAt(text, caret) {
 
 /**
  * Message input: Enter sends, Shift+Enter adds a line. Typing @ suggests `people` (the people who
- * can be mentioned here); arrows move, Enter or Tab picks, Escape closes.
+ * can be mentioned here); arrows move, Enter or Tab picks, Escape closes. Files can be added with
+ * the paperclip, by pasting or by dropping them on the input (database mode only: demo mode has
+ * no file storage). onSend(body, attachments) resolves true once the message is saved.
  */
 export function Composer({ placeholder, label, onSend, hint, compact, people = [] }) {
+  const { mode } = useWorkspace();
+  const canAttach = mode === "database";
+  const uploads = useUploads();
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef(null);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -301,18 +430,41 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
     });
   };
 
+  const ready = Boolean(body.trim() || uploads.ready.length) && !uploads.uploading && !uploads.failed;
+
   const send = async (e) => {
     e?.preventDefault();
-    const text = body.trim();
-    if (!text || sending) return;
+    if (!ready || sending) return;
     setSending(true);
-    const ok = await onSend(text);
+    const ok = await onSend(body.trim(), uploads.ready);
     setSending(false);
     if (ok) {
       setBody("");
       setCaret(0);
+      uploads.clear();
     }
     ref.current?.focus();
+  };
+
+  const onPaste = (e) => {
+    if (!canAttach || !e.clipboardData.files.length) return;
+    e.preventDefault();
+    uploads.add(e.clipboardData.files);
+  };
+
+  const dropProps = canAttach && {
+    onDragOver: (e) => {
+      if (![...e.dataTransfer.types].includes("Files")) return;
+      e.preventDefault();
+      setDragging(true);
+    },
+    onDragLeave: (e) => !e.currentTarget.contains(e.relatedTarget) && setDragging(false),
+    onDrop: (e) => {
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      setDragging(false);
+      uploads.add(e.dataTransfer.files);
+    },
   };
 
   const onKeyDown = (e) => {
@@ -338,7 +490,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
   };
 
   return (
-    <form onSubmit={send} className="relative flex flex-col gap-2">
+    <form onSubmit={send} className="relative flex flex-col gap-2" {...dropProps}>
       {open && (
         <ul id={listId} role="listbox" aria-label="Mention someone" className="absolute bottom-full left-0 z-20 mb-2 w-64 overflow-hidden rounded-2xl border border-line bg-card py-1 shadow-pop">
           {suggestions.map((user, i) => (
@@ -359,8 +511,39 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           ))}
         </ul>
       )}
-      <label className={cx("flex items-end gap-2.5 bg-input", compact ? "rounded-[26px] p-1.5 pl-[18px]" : "rounded-[29px] p-1.5 pl-[22px]")}>
+      <PendingFiles files={uploads.files} onRemove={uploads.remove} />
+      <label
+        className={cx(
+          "flex items-end gap-2.5 bg-input outline-2 outline-offset-2 outline-transparent transition-[outline-color]",
+          compact ? "rounded-[26px] p-1.5" : "rounded-[29px] p-1.5",
+          canAttach ? "pl-1.5" : compact ? "pl-[18px]" : "pl-[22px]",
+          dragging && "outline-dashed outline-accent"
+        )}
+      >
         <span className="sr-only">{label}</span>
+        {canAttach && (
+          <>
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              aria-label="Add files"
+              title="Add files or images"
+              className={cx("grid shrink-0 place-items-center rounded-full text-secondary transition-colors hover:bg-hover hover:text-fg", compact ? "size-10" : "size-11")}
+            >
+              <Paperclip className="size-[18px]" aria-hidden />
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                uploads.add(e.target.files);
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
         <textarea
           ref={ref}
           rows={1}
@@ -374,6 +557,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           onBlur={() => mention && setDismissedAt(mention.start)}
           onFocus={() => setDismissedAt(null)}
           onKeyDown={onKeyDown}
+          onPaste={onPaste}
           placeholder={placeholder}
           role="combobox"
           aria-autocomplete="list"
@@ -382,7 +566,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           aria-activedescendant={open ? `${listId}-${active}` : undefined}
           className="min-w-0 flex-1 resize-none bg-transparent py-2.5 text-sm leading-normal text-fg outline-none placeholder:text-faint"
         />
-        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!body.trim()} className={compact ? "h-10 px-[18px]" : ""}>
+        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!ready} className={compact ? "h-10 px-[18px]" : ""}>
           Send
         </Button>
       </label>
@@ -394,5 +578,5 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
 /** Sends a message to a conversation and reports success. */
 export function useSendMessage(conversationId) {
   const { run } = useAction();
-  return async (body) => Boolean(await run({ type: "message.create", id: conversationId, data: { body } }));
+  return async (body, attachments) => Boolean(await run({ type: "message.create", id: conversationId, data: { body, attachments } }));
 }

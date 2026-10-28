@@ -19,6 +19,7 @@ export default async function proxy(request) {
 }
 
 export const config = {
-  // Everything except Next.js assets and static files.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)"],
+  // Everything except Next.js assets and static files. Chat files end in .png, .jpg and so on but
+  // need the session, so /api/files is matched on its own.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)", "/api/files/:path*"],
 };
