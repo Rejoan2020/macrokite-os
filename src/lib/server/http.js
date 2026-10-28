@@ -4,6 +4,7 @@ import { ACTION_TYPES, DomainError } from "../engine";
 import { requireIdentity } from "./auth";
 import { isDatabaseConfigured } from "./db";
 import { sendEmails } from "./email";
+import { deleteFiles } from "./files";
 import { createWorkspace, runAction } from "./repository";
 
 export const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -34,7 +35,7 @@ async function readBody(request) {
  * the user visits could send a "simple" text/plain POST to the API. Requiring a JSON content type
  * forces a CORS preflight that other origins fail, and an explicit foreign Origin is rejected.
  */
-function rejectCrossSite(request) {
+export function rejectCrossSite(request) {
   const origin = request.headers.get("origin");
   if (origin) {
     let originHost = null;
@@ -77,9 +78,10 @@ export const handleAction = (request) =>
     if (body.data !== undefined && (typeof body.data !== "object" || body.data === null || Array.isArray(body.data))) {
       throw new DomainError("Action data must be an object.");
     }
-    const { result, changes, emails } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
+    const { result, changes, emails, files } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
     // Sent after the response, so a slow mail server never delays the app.
     after(() => sendEmails(emails));
+    after(() => deleteFiles(files));
     return { result, changes };
   });
 

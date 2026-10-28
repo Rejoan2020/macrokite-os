@@ -131,10 +131,24 @@ export const Conversation = model("Conversation", {
   createdAt: String,
 });
 
+// A file sent in a message; the file itself is in Vercel Blob storage at pathname.
+const Attachment = new Schema({ pathname: String, name: String, size: Number, contentType: String, width: Number, height: Number }, { _id: false });
+
 export const Message = model(
   "Message",
   // event: a change logged in a task's activity ("changed status from **To do** to **Done**"); body is empty.
-  { orgId, conversationId: { type: String, required: true }, authorId: String, body: String, event: ref, mentions: [String], editedAt: ref, deletedAt: ref, createdAt: String },
+  {
+    orgId,
+    conversationId: { type: String, required: true },
+    authorId: String,
+    body: String,
+    attachments: [Attachment],
+    event: ref,
+    mentions: [String],
+    editedAt: ref,
+    deletedAt: ref,
+    createdAt: String,
+  },
   [{ orgId: 1, conversationId: 1, createdAt: 1 }]
 );
 

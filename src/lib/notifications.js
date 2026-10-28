@@ -1,4 +1,5 @@
 import { FORMER_MEMBER, TEAM_CHANNEL } from "./constants";
+import { messagePreview } from "./attachments";
 
 /** Where a conversation opens: DMs by the other person, groups and the team chat by id, project chats on their project. */
 export function conversationHref(conversation, userId) {
@@ -22,7 +23,7 @@ export function describeNotification(n, data) {
     const conversation = message && byId("conversations", message.conversationId);
     if (!conversation) return null;
     const actorId = n.actorId ?? message.authorId;
-    const detail = message.deletedAt ? "Message deleted" : message.body;
+    const detail = message.deletedAt ? "Message deleted" : messagePreview(message);
     if (conversation.type === "task") {
       const task = byId("tasks", conversation.taskId);
       if (!task) return null;

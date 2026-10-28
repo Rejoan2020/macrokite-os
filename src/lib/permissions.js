@@ -42,5 +42,11 @@ export const canEditWorkspace = (user) => isAdmin(user);
 /** Choose a project's leads: admins only. */
 export const canChooseLeads = (user) => isAdmin(user);
 
+/** Edit a chat message or comment's text: only whoever wrote it. */
+export const canEditMessage = (message, user) => Boolean(user?.active && !message.event && !message.deletedAt && message.authorId === user._id);
+
+/** Delete a chat message or comment: whoever wrote it, or an admin. A task's logged changes stay. */
+export const canDeleteMessage = (message, user) => Boolean(user?.active && !message.event && !message.deletedAt && (message.authorId === user._id || isAdmin(user)));
+
 /** Fields only canEditTask may change. */
 export const TASK_DETAIL_FIELDS = ["title", "description", "projectId", "phase", "assigneeIds", "dueDate", "priority"];

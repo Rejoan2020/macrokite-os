@@ -176,10 +176,28 @@ async function deliverInviteEmail(identity, snapshot, userId, action, changes, r
 // their read-modify-write cycles.
 let queue = Promise.resolve();
 
+/** The signed-in account's membership, { orgId, userId }, or a 403. */
+export async function requireMember(identity) {
+  const account = await resolveAccount(identity);
+  if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
+  return account;
+}
+
+/**
+ * Stored files an action let go of: those of messages it removed, or that it emptied when deleting
+ * them. They are then removed from Blob storage too.
+ */
+function deletedFiles(snapshot, changes) {
+  const kept = new Map((changes.put.messages ?? []).map((m) => [m._id, new Set((m.attachments ?? []).map((a) => a.pathname))]));
+  const removed = new Set(changes.del.messages ?? []);
+  return snapshot.messages
+    .filter((m) => removed.has(m._id) || kept.has(m._id))
+    .flatMap((m) => (m.attachments ?? []).map((a) => a.pathname).filter((p) => removed.has(m._id) || !kept.get(m._id).has(p)));
+}
+
 export function runAction(identity, action) {
   const run = async () => {
-    const account = await resolveAccount(identity);
-    if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
+    const account = await requireMember(identity);
     const snapshot = await loadSnapshot(account.orgId);
     const now = new Date();
     const { state, changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now, newId });
@@ -187,7 +205,7 @@ export function runAction(identity, action) {
     await persistChanges(snapshot.org, changes);
     const emails = notificationEmails({ state, changes, action, actorId: account.userId, now, appUrl, timeZone: process.env.MACROKITE_TIME_ZONE });
     const put = changes.put.notifications ? { ...changes.put, notifications: ownNotifications(changes.put.notifications, account.userId) } : changes.put;
-    return { result: delivered, changes: { ...changes, put }, emails };
+    return { result: delivered, changes: { ...changes, put }, emails, files: deletedFiles(snapshot, changes) };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});
