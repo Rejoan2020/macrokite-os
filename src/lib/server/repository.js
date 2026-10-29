@@ -67,9 +67,17 @@ async function acceptInvites(identity) {
 /**
  * Maps the account to a workspace member: { status: "member", orgId, userId } or, when there is
  * no active membership, { status: "onboarding", removed, canCreate }.
+ *
+ * `quick` first tries the account's linked records alone (one indexed query), for requests made
+ * while the app is open. Invites and records linked by email are taken up when the app opens, and
+ * whenever the quick check finds no active membership.
  */
-async function resolveAccount(identity) {
+async function resolveAccount(identity, { quick = false } = {}) {
   await connectToDatabase();
+  if (quick) {
+    const member = pickMembership(matchMembers(await User.find({ authId: identity.id }).lean(), identity));
+    if (member) return { status: "member", orgId: member.orgId, userId: member._id };
+  }
   await acceptInvites(identity);
   const members = await findMembers(identity);
   const unlinked = members.filter((u) => !u.authId).map((u) => u._id);
@@ -149,22 +157,28 @@ const latestNotifications = (orgId, userId) =>
 
 async function persistChanges(org, changes) {
   const orgId = org._id;
+  const writes = [];
   if (changes.org) {
     const { _id, ...rest } = changes.org;
-    await Organization.replaceOne({ _id: orgId }, { _id: orgId, ...rest, slug: org.slug, schemaVersion: SCHEMA_VERSION });
+    writes.push(Organization.replaceOne({ _id: orgId }, { _id: orgId, ...rest, slug: org.slug, schemaVersion: SCHEMA_VERSION }));
   }
-  for (const [collection, docs] of Object.entries(changes.put ?? {})) {
+  // Collections are independent, so they are written in parallel; within one, puts go before removals.
+  for (const collection of new Set([...Object.keys(changes.put ?? {}), ...Object.keys(changes.del ?? {})])) {
     const Model = COLLECTION_MODELS[collection];
     if (!Model) continue;
-    const latest = [...new Map(docs.map((d) => [d._id, d])).values()];
-    await Model.bulkWrite(
-      latest.map((doc) => ({ replaceOne: { filter: { _id: doc._id, orgId }, replacement: { ...doc, orgId }, upsert: true } }))
+    const docs = changes.put?.[collection] ?? [];
+    const ids = changes.del?.[collection] ?? [];
+    writes.push(
+      (async () => {
+        const latest = [...new Map(docs.map((d) => [d._id, d])).values()];
+        if (latest.length) {
+          await Model.bulkWrite(latest.map((doc) => ({ replaceOne: { filter: { _id: doc._id, orgId }, replacement: { ...doc, orgId }, upsert: true } })));
+        }
+        if (ids.length) await Model.deleteMany({ orgId, _id: { $in: ids } });
+      })()
     );
   }
-  for (const [collection, ids] of Object.entries(changes.del ?? {})) {
-    const Model = COLLECTION_MODELS[collection];
-    if (Model && ids.length) await Model.deleteMany({ orgId, _id: { $in: ids } });
-  }
+  await Promise.all(writes);
 }
 
 const accountSummary = (identity) => ({ email: identity.email, name: identity.name });
@@ -258,7 +272,7 @@ let queue = Promise.resolve();
 
 /** The signed-in account's membership, { orgId, userId }, or a 403. */
 export async function requireMember(identity) {
-  const account = await resolveAccount(identity);
+  const account = await resolveAccount(identity, { quick: true });
   if (account.status !== "member") throw new DomainError("You are not a member of a workspace.", { status: 403 });
   return account;
 }
