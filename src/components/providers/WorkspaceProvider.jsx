@@ -1,15 +1,18 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { databaseAdapter, demoAdapter, fetchOlderMessages, fetchWorkspace } from "@/lib/client/storage";
+import { databaseAdapter, demoAdapter, fetchOlderMessages, fetchWorkspace, OPTIMISTIC_ACTIONS, pendingAction, withPending } from "@/lib/client/storage";
 import { keepLoadedHistory, withOlderMessages } from "@/lib/history";
 import { indexById, unreadByConversation } from "@/lib/selectors";
 
 const WorkspaceContext = createContext(null);
 
-/** Database mode when the server has MongoDB configured; otherwise browser demo storage. */
-async function resolveWorkspace() {
-  const server = await fetchWorkspace();
+/**
+ * Database mode when the server has MongoDB configured; otherwise browser demo storage. `initial` is
+ * the server's reply when the page brought it along; otherwise it's fetched.
+ */
+async function resolveWorkspace(initial) {
+  const server = initial ?? (await fetchWorkspace());
   if (server.mode === "database") return fromServer(server);
   const local = demoAdapter.load();
   return { mode: "demo", status: "ready", currentUserId: local.currentUserId, data: local.data, account: null, onboarding: null };
@@ -20,7 +23,7 @@ function fromServer({ status, account, currentUserId, data, removed, canCreate }
   return { mode: "database", status: "onboarding", currentUserId: null, data: null, account, onboarding: { removed, canCreate } };
 }
 
-export function WorkspaceProvider({ children }) {
+export function WorkspaceProvider({ initial = null, children }) {
   const [status, setStatus] = useState("loading"); // loading | ready | onboarding | error
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null);
@@ -28,13 +31,20 @@ export function WorkspaceProvider({ children }) {
   const [onboarding, setOnboarding] = useState(null); // { removed, canCreate } when not in a workspace
   const [data, setData] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const stateRef = useRef(null);
+  const stateRef = useRef(null); // the data as the server (or demo storage) has it
+  const pendingRef = useRef([]); // database-mode actions shown before the server confirms them
   const queueRef = useRef(Promise.resolve());
 
-  const commit = useCallback((next) => {
-    stateRef.current = next;
-    setData(next);
-  }, []);
+  // What's shown: the saved data plus the actions still on their way to the server.
+  const show = useCallback(() => setData(pendingRef.current.length ? withPending(stateRef.current, pendingRef.current) : stateRef.current), []);
+
+  const commit = useCallback(
+    (next) => {
+      stateRef.current = next;
+      show();
+    },
+    [show]
+  );
 
   const applyLoaded = useCallback(
     ({ mode, status, currentUserId, data, account, onboarding }) => {
@@ -54,9 +64,11 @@ export function WorkspaceProvider({ children }) {
     setStatus("error");
   }, []);
 
+  // Applied after the first render rather than as initial state, so the server-rendered HTML (the
+  // boot screen) matches; the page's data comes with it, so there's no request to wait for.
   useEffect(() => {
-    resolveWorkspace().then(applyLoaded, applyError);
-  }, [applyLoaded, applyError]);
+    resolveWorkspace(initial).then(applyLoaded, applyError);
+  }, [initial, applyLoaded, applyError]);
 
   const load = useCallback(() => {
     setStatus("loading");
@@ -83,22 +95,42 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const dispatch = useCallback(
-    (action) =>
-      enqueue(async () => {
+    (action) => {
+      // Some actions show right away; the server's reply then replaces them, or removes them if it fails.
+      const entry = mode === "database" && OPTIMISTIC_ACTIONS.has(action.type) ? pendingAction(action, currentUserId) : null;
+      const settle = () => (pendingRef.current = pendingRef.current.filter((p) => p !== entry));
+      if (entry) {
+        pendingRef.current = [...pendingRef.current, entry];
+        show();
+      }
+      return enqueue(async () => {
         const adapter = mode === "database" ? databaseAdapter : demoAdapter;
-        const { state, result } = await adapter.dispatch(stateRef.current, action, currentUserId);
-        commit(state);
-        return result;
-      }),
-    [enqueue, mode, currentUserId, commit]
+        try {
+          const { state, result } = await adapter.dispatch(stateRef.current, action, currentUserId);
+          settle();
+          commit(state);
+          return result;
+        } catch (error) {
+          if (entry) {
+            settle();
+            show();
+          }
+          throw error;
+        }
+      });
+    },
+    [enqueue, mode, currentUserId, commit, show]
   );
 
-  /** Pulls the latest snapshot from the server (database mode). Queued behind pending writes. */
+  /**
+   * Pulls the latest snapshot from the server (database mode). Queued behind pending writes. When
+   * nothing changed the server says so, and nothing re-renders.
+   */
   const refresh = useCallback(() => {
     if (mode !== "database") return Promise.resolve();
     return enqueue(async () => {
-      const server = await fetchWorkspace();
-      if (server.mode !== "database") return;
+      const server = await fetchWorkspace(stateRef.current ? stateRef.current.org.version ?? 0 : undefined);
+      if (server.mode !== "database" || server.status === "unchanged") return;
       // Removed from the workspace mid-session: show the onboarding screen instead.
       if (server.status === "member") commit(keepLoadedHistory(stateRef.current, server.data));
       else applyLoaded(fromServer(server));
@@ -139,6 +171,11 @@ export function WorkspaceProvider({ children }) {
       if (c.type === "task") tasks[c.taskId] = c;
       if (c.type === "group" && c.memberIds.includes(currentUserId)) groups.push(c);
     }
+    // Each conversation's messages, oldest first, without deleted ones: grouped once per change
+    // rather than filtered from every message wherever a chat or preview shows.
+    const threads = {};
+    for (const m of data.messages) if (!m.deletedAt) (threads[m.conversationId] ??= []).push(m);
+    for (const list of Object.values(threads)) list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const currentUser = users[currentUserId];
     return {
       status,
@@ -157,6 +194,7 @@ export function WorkspaceProvider({ children }) {
       activeUsers: data.users.filter((u) => u.active),
       unread: unreadByConversation(data, currentUserId),
       chats: { general, projects: projectChats, dms, tasks, groups },
+      threads,
       lookup: {
         users,
         clients: indexById(data.clients),

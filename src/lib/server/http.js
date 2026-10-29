@@ -78,11 +78,11 @@ export const handleAction = (request) =>
     if (body.data !== undefined && (typeof body.data !== "object" || body.data === null || Array.isArray(body.data))) {
       throw new DomainError("Action data must be an object.");
     }
-    const { result, changes, emails, files } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
+    const { result, changes, version, emails, files } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
     // Sent after the response, so a slow mail server never delays the app.
     after(() => sendEmails(emails));
     after(() => deleteFiles(files));
-    return { result, changes };
+    return { result, changes, version };
   });
 
 /** Handles POST /api/workspace: { name } starts a new workspace with the caller as admin. */

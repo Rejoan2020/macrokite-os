@@ -12,6 +12,7 @@ import { COMPANY_PROJECT, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../src/l
 import { attachmentFolder, messagePreview } from "../src/lib/attachments.js";
 import { normalizeSnapshot } from "../src/lib/compat.js";
 import { actionReads } from "../src/lib/reads.js";
+import { pendingAction, withPending } from "../src/lib/client/storage.js";
 import { keepLoadedHistory, MESSAGE_PAGE, newestMessages, olderPage, recentMessages, withOlderMessages } from "../src/lib/history.js";
 
 let n = 0;
@@ -786,6 +787,19 @@ test("chat history: recent window, older pages and refreshes", () => {
   assert.equal(refreshed.hasOlder.c, false);
   // A conversation that's gone takes its history with it.
   assert.equal(keepLoadedHistory(scrolled, { messages: [], hasOlder: {} }).messages.length, 0);
+});
+
+test("optimistic updates: pending actions show on top of the saved data", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  const sending = pendingAction({ type: "message.create", id: general._id, data: { body: "on its way" } }, SEED_OWNER_ID);
+  const denied = pendingAction({ type: "message.edit", id: "msg_missing", data: { body: "x" } }, SEED_OWNER_ID);
+  const shown = withPending(state, [denied, sending]);
+  const message = shown.messages.find((m) => m.body === "on its way");
+  assert.ok(message?.pending, "the new message shows, marked pending");
+  assert.equal(shown.messages.length, state.messages.length + 1, "an action the browser can't apply is skipped");
+  // Showing it again (another update while it waits) keeps its id, so the row isn't replaced.
+  assert.equal(withPending(state, [denied, sending]).messages.find((m) => m.body === "on its way")._id, message._id);
+  assert.equal(withPending(state, []), state);
 });
 
 console.log("\nall engine checks passed");

@@ -78,7 +78,7 @@ export function AppShell({ children }) {
   );
 }
 
-function BootScreen() {
+export function BootScreen() {
   return (
     <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading workspace">
       <div className="flex flex-col items-center gap-4">
