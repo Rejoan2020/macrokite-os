@@ -85,8 +85,11 @@ async function call(method, url, body) {
 export const databaseAdapter = {
   mode: "database",
   async dispatch(state, action) {
-    const { result, changes } = await call("POST", "/api/actions", action);
-    return { state: applyChanges(state, changes), result };
+    const { result, changes, version } = await call("POST", "/api/actions", action);
+    const next = applyChanges(state, changes);
+    // Up to date when nothing else changed since our copy; otherwise the next poll catches up.
+    const current = version && (state.org.version ?? 0) === version.from;
+    return { state: { ...next, org: { ...next.org, version: current ? version.to : state.org.version } }, result };
   },
 };
 
@@ -94,7 +97,7 @@ export const databaseAdapter = {
  * Asks the server which storage mode is configured. In database mode the reply has the signed-in
  * account and either the workspace (status "member") or what to do first (status "onboarding").
  */
-export const fetchWorkspace = () => call("GET", "/api/workspace");
+export const fetchWorkspace = (version) => call("GET", version === undefined ? "/api/workspace" : `/api/workspace?version=${version}`);
 
 /** A page of a conversation's messages sent before `before` (database mode): { messages, hasOlder }. */
 export const fetchOlderMessages = (conversationId, before) =>

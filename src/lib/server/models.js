@@ -25,6 +25,7 @@ export const Organization = model("Organization", {
   callUrl: String,
   slug: { type: String, unique: true },
   schemaVersion: Number,
+  version: Number, // counts writes to the workspace, so polls can tell when nothing changed
   ...timestamps,
 });
 

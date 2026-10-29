@@ -93,12 +93,15 @@ export function WorkspaceProvider({ children }) {
     [enqueue, mode, currentUserId, commit]
   );
 
-  /** Pulls the latest snapshot from the server (database mode). Queued behind pending writes. */
+  /**
+   * Pulls the latest snapshot from the server (database mode). Queued behind pending writes. When
+   * nothing changed the server says so, and nothing re-renders.
+   */
   const refresh = useCallback(() => {
     if (mode !== "database") return Promise.resolve();
     return enqueue(async () => {
-      const server = await fetchWorkspace();
-      if (server.mode !== "database") return;
+      const server = await fetchWorkspace(stateRef.current ? stateRef.current.org.version ?? 0 : undefined);
+      if (server.mode !== "database" || server.status === "unchanged") return;
       // Removed from the workspace mid-session: show the onboarding screen instead.
       if (server.status === "member") commit(keepLoadedHistory(stateRef.current, server.data));
       else applyLoaded(fromServer(server));

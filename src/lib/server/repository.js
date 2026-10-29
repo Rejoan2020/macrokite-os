@@ -21,6 +21,15 @@ import { COLLECTION_MODELS, Conversation, Invite, Message, Notification, Organiz
 
 const newId = (prefix) => `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
+/**
+ * Marks the workspace changed. Called after the writes, so a poll that sees the new version also
+ * sees the new data. Returns the new version.
+ */
+async function bumpVersion(orgId) {
+  const org = await Organization.findOneAndUpdate({ _id: orgId }, { $inc: { version: 1 } }, { returnDocument: "after", projection: { version: 1 } }).lean();
+  return org?.version ?? 0;
+}
+
 const isDuplicateKey = (error) => error?.code === 11000 || error?.writeErrors?.every?.((e) => e.code === 11000);
 
 async function findMembers(identity) {
@@ -61,6 +70,7 @@ async function acceptInvites(identity) {
     ).lean();
     if (internal) await Conversation.updateOne({ orgId: invite.orgId, type: "project", projectId: internal._id }, { $addToSet: { memberIds: member._id } });
     await Invite.updateOne({ _id: invite._id, acceptedAt: null }, { $set: { acceptedAt: now.toISOString() } });
+    await bumpVersion(invite.orgId);
   }
 }
 
@@ -115,7 +125,8 @@ async function loadSnapshot(orgId, reads = []) {
   const renamed = renamedCompanyProject(snapshot.projects, new Date());
   if (renamed) {
     // Matching on the old name keeps this a one-time rename even with concurrent requests.
-    await Project.updateOne({ _id: renamed._id, orgId: org._id, name: "Internal" }, { $set: { name: renamed.name, updatedAt: renamed.updatedAt } });
+    const { modifiedCount } = await Project.updateOne({ _id: renamed._id, orgId: org._id, name: "Internal" }, { $set: { name: renamed.name, updatedAt: renamed.updatedAt } });
+    if (modifiedCount) await bumpVersion(org._id);
     snapshot.projects = snapshot.projects.map((p) => (p._id === renamed._id ? renamed : p));
   }
   for (const [name, filter] of reads) {
@@ -159,8 +170,9 @@ async function persistChanges(org, changes) {
   const orgId = org._id;
   const writes = [];
   if (changes.org) {
-    const { _id, ...rest } = changes.org;
-    writes.push(Organization.replaceOne({ _id: orgId }, { _id: orgId, ...rest, slug: org.slug, schemaVersion: SCHEMA_VERSION }));
+    // The version is left alone: the engine's copy of the org may be out of date.
+    const { _id, version, ...rest } = changes.org;
+    writes.push(Organization.updateOne({ _id: orgId }, { $set: { ...rest, slug: org.slug, schemaVersion: SCHEMA_VERSION } }));
   }
   // Collections are independent, so they are written in parallel; within one, puts go before removals.
   for (const collection of new Set([...Object.keys(changes.put ?? {}), ...Object.keys(changes.del ?? {})])) {
@@ -191,10 +203,16 @@ const ownNotifications = (notifications, userId) => notifications.filter((n) => 
  * conversations they can see (data.hasOlder marks those with more), and their latest notifications.
  * data.notifiedMessages has the messages those notifications point to outside the loaded history.
  */
-export async function getWorkspace(identity) {
-  const account = await resolveAccount(identity);
+export async function getWorkspace(identity, { version } = {}) {
+  // A poll passes the version it has, and gets { status: "unchanged" } when nothing was written since.
+  const polling = version !== undefined;
+  const account = await resolveAccount(identity, { quick: polling });
   if (account.status !== "member") return { ...account, account: accountSummary(identity) };
   const { orgId, userId } = account;
+  if (polling) {
+    const org = await Organization.findById(orgId, { version: 1 }).lean();
+    if (org && (org.version ?? 0) === version) return { status: "unchanged" };
+  }
   const [snapshot, conversations, notifications] = await Promise.all([loadSnapshot(orgId), recentByConversation(orgId, userId), latestNotifications(orgId, userId)]);
 
   const readAt = Object.fromEntries(snapshot.readStates.filter((r) => r.userId === userId).map((r) => [r.conversationId, r.lastReadAt]));
@@ -297,9 +315,14 @@ export function runAction(identity, action) {
     const { state, changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now, newId });
     const delivered = await deliverInviteEmail(identity, snapshot, account.userId, action, changes, result);
     await persistChanges(snapshot.org, changes);
+    const from = snapshot.org.version ?? 0;
+    const written = changes.org || Object.keys(changes.put).length || Object.keys(changes.del).length;
+    const to = written ? await bumpVersion(snapshot.org._id) : from;
     const emails = notificationEmails({ state, changes, action, actorId: account.userId, now, appUrl, timeZone: process.env.MACROKITE_TIME_ZONE });
     const put = changes.put.notifications ? { ...changes.put, notifications: ownNotifications(changes.put.notifications, account.userId) } : changes.put;
-    return { result: delivered, changes: { ...changes, put }, emails, files: deletedFiles(snapshot, changes) };
+    // When nobody else wrote in between, the browser's copy plus these changes is the new version.
+    const version = to === from + 1 ? { from, to } : null;
+    return { result: delivered, changes: { ...changes, put }, version, emails, files: deletedFiles(snapshot, changes) };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});
