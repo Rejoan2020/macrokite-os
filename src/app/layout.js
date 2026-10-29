@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { AppShell, BootScreen } from "@/components/shell/AppShell";
+import { ServiceWorker } from "@/components/shell/ServiceWorker";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { requireIdentity } from "@/lib/server/auth";
 import { isDatabaseConfigured } from "@/lib/server/db";
@@ -14,6 +15,9 @@ const inter = Inter({ variable: "--font-inter", subsets: ["latin"], weight: ["30
 export const metadata = {
   title: { default: "Macrokite OS", template: "%s · Macrokite OS" },
   description: "The Macrokite team hub: clients, projects, tasks, meetings and conversation in one place.",
+  // Installed on an iPhone home screen: full screen, under the name Macrokite.
+  appleWebApp: { capable: true, title: "Macrokite", statusBarStyle: "black" },
+  icons: { apple: "/apple-icon-180.png" },
 };
 
 export const viewport = {
@@ -54,6 +58,7 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="min-h-dvh">
+        <ServiceWorker />
         <ToastProvider>
           <Suspense fallback={<BootScreen />}>
             <Workspace>{children}</Workspace>

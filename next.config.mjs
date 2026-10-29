@@ -3,6 +3,18 @@ const nextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  headers() {
+    return [
+      {
+        // The service worker is always checked for updates, and can only run this site's scripts.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+    ];
+  },
   // Pages that moved when the menu was reorganized; old links and bookmarks still land somewhere useful.
   redirects() {
     return [
