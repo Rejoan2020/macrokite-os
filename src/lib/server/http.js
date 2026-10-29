@@ -4,6 +4,7 @@ import { ACTION_TYPES, DomainError } from "../engine";
 import { requireIdentity } from "./auth";
 import { isDatabaseConfigured } from "./db";
 import { sendEmails } from "./email";
+import { sendPushes } from "./push";
 import { deleteFiles } from "./files";
 import { createWorkspace, runAction } from "./repository";
 
@@ -51,7 +52,7 @@ export function rejectCrossSite(request) {
 }
 
 /** Shared guard for database-mode writes: same-origin JSON from a signed-in account. */
-async function guardedWrite(request, handle) {
+export async function guardedWrite(request, handle) {
   await connection();
   const rejected = rejectCrossSite(request);
   if (rejected) return rejected;
@@ -78,9 +79,10 @@ export const handleAction = (request) =>
     if (body.data !== undefined && (typeof body.data !== "object" || body.data === null || Array.isArray(body.data))) {
       throw new DomainError("Action data must be an object.");
     }
-    const { result, changes, version, emails, files } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
+    const { result, changes, version, emails, pushes, files } = await runAction(identity, { type: body.type, id: body.id, data: body.data ?? {} });
     // Sent after the response, so a slow mail server never delays the app.
     after(() => sendEmails(emails));
+    after(() => sendPushes(pushes));
     after(() => deleteFiles(files));
     return { result, changes, version };
   });
