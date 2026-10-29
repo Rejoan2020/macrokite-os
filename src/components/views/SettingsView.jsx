@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useToast } from "@/components/providers/ToastProvider";
 import { Avatar, Button, Card, cx, Page, Switch, TabGroup } from "@/components/ui/primitives";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/Dialog";
 import { Field, Input } from "@/components/ui/form";
 import { useAction } from "@/lib/client/useAction";
 import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_PREFS } from "@/lib/constants";
+import { currentSubscription, pushAvailability, turnOffPush, turnOnPush } from "@/lib/client/push";
 
 function SectionHead({ id, title, hint, children }) {
   return (
@@ -113,6 +114,13 @@ export function SettingsView() {
           ))}
         </Card>
 
+        {mode === "database" && (
+          <PhoneNotifications
+            everyMessage={values.notificationPrefs.chatMessages}
+            onEveryMessage={(checked) => setValues((v) => ({ ...v, notificationPrefs: { ...v.notificationPrefs, chatMessages: checked } }))}
+          />
+        )}
+
         {isAdmin && (
           <Card as="section" aria-labelledby="s-workspace" className={panel}>
             <SectionHead id="s-workspace" title="Workspace" hint="Only admins see this" />
@@ -131,6 +139,75 @@ export function SettingsView() {
 
       {mode === "demo" && <DemoData />}
     </Page>
+  );
+}
+
+const DEVICE_STATUS = {
+  checking: "Checking…",
+  on: "On",
+  off: "Off",
+  denied: "Blocked. Allow notifications for this site in your browser’s settings, then come back.",
+  unsupported: "This browser can’t receive them. On an iPhone, add the app to your Home Screen first.",
+  unconfigured: "Not set up on the server yet.",
+};
+
+/**
+ * Push notifications: on or off for this device (straight away, like Appearance), and whether every
+ * chat message is pushed (saved with the rest of the form).
+ */
+function PhoneNotifications({ everyMessage, onEveryMessage }) {
+  const toast = useToast();
+  const [status, setStatus] = useState("checking");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    Promise.resolve(pushAvailability())
+      .then((availability) => (availability === "available" ? currentSubscription().then((s) => (s ? "on" : "off")) : availability))
+      .then(setStatus, () => setStatus("off"));
+  }, []);
+
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      if (status === "on") {
+        await turnOffPush();
+        setStatus("off");
+      } else {
+        const permission = await turnOnPush();
+        setStatus(permission === "granted" ? "on" : permission === "denied" ? "denied" : "off");
+        if (permission === "granted") toast.success("Notifications on", "This device gets them even when the app is closed.");
+      }
+    } catch (error) {
+      toast.error("Couldn’t turn on notifications", error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card as="section" aria-labelledby="s-push" className={panel}>
+      <SectionHead id="s-push" title="Phone notifications" hint="Messages to you, @mentions, tasks, comments and meetings, even when the app is closed" />
+      <div className="mt-5 flex items-center justify-between gap-4 border-t border-row pt-4 pb-3.5">
+        <span>
+          <span className="block text-sm font-medium text-strong">This device</span>
+          <span className="mt-1 block text-xs text-faint" aria-live="polite">
+            {DEVICE_STATUS[status]}
+          </span>
+        </span>
+        {(status === "on" || status === "off") && (
+          <Button size="sm" variant={status === "on" ? "secondary" : "primary"} loading={busy} onClick={toggle}>
+            {status === "on" ? "Turn off" : "Turn on"}
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-4 border-t border-row pt-4">
+        <span>
+          <span className="block text-sm font-medium text-strong">Every chat message</span>
+          <span className="mt-1 block text-xs text-faint">In the team chat, groups and project chats. Off: only when you’re @mentioned.</span>
+        </span>
+        <Switch label="Every chat message" checked={everyMessage} onChange={onEveryMessage} />
+      </div>
+    </Card>
   );
 }
 

@@ -145,6 +145,8 @@ export const profileInput = z.object({
   notificationPrefs: z.object({
     assignment: z.boolean(),
     meetingInvite: z.boolean(),
+    // Missing on settings saved before it existed.
+    chatMessages: z.boolean().default(false),
   }),
 });
 

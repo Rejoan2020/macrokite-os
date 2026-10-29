@@ -42,6 +42,19 @@ const icons = [
   ["apple-icon-180.png", 180, 0.66],
 ];
 
+// Android's status bar shows a white silhouette: the kite alone, on transparent.
+function badge(size) {
+  const k = Math.round(size * 0.8);
+  return h(
+    "div",
+    { style: { width: size, height: size, display: "flex", alignItems: "center", justifyContent: "center" } },
+    h("div", { style: { width: k, height: k, background: "#ffffff", borderRadius: `${k / 2}px ${k / 2}px ${k / 2}px ${Math.round(k * 0.14)}px` } })
+  );
+}
+const badgePng = await new ImageResponse(badge(96), { width: 96, height: 96 }).arrayBuffer();
+await writeFile(new URL("../public/badge-96.png", import.meta.url), Buffer.from(badgePng));
+console.log("wrote public/badge-96.png");
+
 for (const [name, size, kite] of icons) {
   const png = await new ImageResponse(icon(size, kite), { width: size, height: size }).arrayBuffer();
   await writeFile(new URL(`../public/${name}`, import.meta.url), Buffer.from(png));

@@ -14,6 +14,7 @@ import { normalizeSnapshot } from "../src/lib/compat.js";
 import { actionReads } from "../src/lib/reads.js";
 import { pendingAction, withPending } from "../src/lib/client/storage.js";
 import { keepLoadedHistory, MESSAGE_PAGE, newestMessages, olderPage, recentMessages, withOlderMessages } from "../src/lib/history.js";
+import { pushNotifications } from "../src/lib/push.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
@@ -218,7 +219,8 @@ test("workspace + profile; foreign org rejected", () => {
   run({ type: "profile.update", data: { name: "Alex M.", notificationPrefs: { assignment: false, meetingInvite: true } } });
   const me = state.users.find((u) => u._id === SEED_OWNER_ID);
   assert.equal(me.name, "Alex M.");
-  assert.deepEqual(me.notificationPrefs, { assignment: false, meetingInvite: true });
+  // Settings saved without the newer chat-messages choice get it off.
+  assert.deepEqual(me.notificationPrefs, { assignment: false, meetingInvite: true, chatMessages: false });
   assert.equal(me.role, "admin", "profile updates cannot change role");
   fails({ type: "profile.update", data: { avatarUrl: "ftp://x" } }, (e) => assert.ok(e.fieldErrors.avatarUrl));
   assert.throws(() => applyAction(state, { type: "task.delete", id: "tsk_j1" }, { ...ctx, orgId: "org_other" }), DomainError);
@@ -800,6 +802,35 @@ test("optimistic updates: pending actions show on top of the saved data", () => 
   // Showing it again (another update while it waits) keeps its id, so the row isn't replaced.
   assert.equal(withPending(state, [denied, sending]).messages.find((m) => m.body === "on its way")._id, message._id);
   assert.equal(withPending(state, []), state);
+});
+
+test("push notifications: notifications, plus every chat message for those who chose it", () => {
+  const general = state.conversations.find((c) => c.type === "general");
+  const [writer, mentioned, follower] = state.users.filter((u) => u.active);
+  const handle = (u) => `@${mentionHandle(u, state.users.filter((x) => x.active))}`;
+  const pushesFor = (action, userId) => {
+    const out = applyAction(state, action, as(userId));
+    return pushNotifications({ state: out.state, changes: out.changes, actorId: userId, now: ctx.now });
+  };
+
+  // By default, a team-chat message only pushes to the person @mentioned.
+  const post = { type: "message.create", id: general._id, data: { body: `hi ${handle(mentioned)}` } };
+  const mention = pushesFor(post, writer._id);
+  assert.deepEqual(mention.map((p) => p.userId), [mentioned._id]);
+  assert.match(mention[0].title, /mentioned you/);
+  assert.equal(mention[0].body, `hi ${handle(mentioned)}`);
+  assert.equal(mention[0].tag, `cnv:${general._id}`);
+  assert.equal(mention[0].url, "/inbox/" + general._id);
+
+  // Someone who chose every chat message gets it too; the author never does, the mentioned person once.
+  run({ type: "profile.update", data: { notificationPrefs: { assignment: true, meetingInvite: true, chatMessages: true } } }, as(follower._id));
+  const all = pushesFor(post, writer._id);
+  assert.deepEqual(all.map((p) => p.userId).sort(), [mentioned._id, follower._id].sort());
+  assert.equal(all.find((p) => p.userId === follower._id).title, `${writer.name} in Everyone`);
+
+  // Direct messages push to the other person.
+  const dm = pushesFor({ type: "dm.send", data: { userId: mentioned._id, body: "quick question" } }, writer._id);
+  assert.deepEqual(dm.map((p) => [p.userId, p.body]), [[mentioned._id, "quick question"]]);
 });
 
 console.log("\nall engine checks passed");

@@ -171,6 +171,14 @@ export const Notification = model(
   [{ orgId: 1, userId: 1, createdAt: -1 }, { orgId: 1, targetId: 1 }]
 );
 
+// A device that receives push notifications for a member: the browser's push subscription. Not part
+// of the workspace snapshot; only the server reads these.
+export const PushSubscription = model(
+  "PushSubscription",
+  { orgId, userId: String, endpoint: { type: String, unique: true }, keys: { p256dh: String, auth: String }, createdAt: String },
+  [{ orgId: 1, userId: 1 }]
+);
+
 export const COLLECTION_MODELS = {
   users: User,
   invites: Invite,

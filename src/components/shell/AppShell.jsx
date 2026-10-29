@@ -11,6 +11,7 @@ import { useTheme } from "@/lib/client/theme";
 import { Logo } from "./Logo";
 import { OnboardingScreen } from "./AccountScreens";
 import { signOutAction } from "@/app/auth/actions";
+import { turnOffPush } from "@/lib/client/push";
 import { NotificationBell, useUnreadNotifications } from "./NotificationBell";
 import { useMeetingReminders } from "@/components/meetings/MeetingBits";
 
@@ -260,6 +261,12 @@ function Sidebar({ mobile }) {
   );
 }
 
+/** Logging out stops this device's notifications first, so a shared phone doesn't keep getting yours. */
+async function logOut() {
+  await Promise.race([turnOffPush(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+  await signOutAction();
+}
+
 /** Your profile at the foot of the sidebar; opens a small menu with Settings and Log out. */
 function ProfileMenu({ user, subtitle, canSignOut }) {
   const [open, setOpen] = useState(false);
@@ -290,7 +297,7 @@ function ProfileMenu({ user, subtitle, canSignOut }) {
             Settings
           </Link>
           {canSignOut && (
-            <button type="button" role="menuitem" disabled={pending} onClick={() => startTransition(() => signOutAction())} className={cx(item, "text-danger disabled:opacity-60")}>
+            <button type="button" role="menuitem" disabled={pending} onClick={() => startTransition(logOut)} className={cx(item, "text-danger disabled:opacity-60")}>
               <LogOut className="size-4" strokeWidth={1.8} aria-hidden />
               {pending ? "Logging out…" : "Log out"}
             </button>

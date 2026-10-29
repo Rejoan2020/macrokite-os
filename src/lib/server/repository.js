@@ -5,6 +5,7 @@ import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembersh
 import { SCHEMA_VERSION } from "../seed";
 import { normalizeSnapshot } from "../compat";
 import { notificationEmails } from "../emails";
+import { pushNotifications } from "../push";
 import { olderPage, PAGE_FETCH, RECENT_FETCH, recentMessages } from "../history";
 import { actionReads } from "../reads";
 import { connectToDatabase } from "./db";
@@ -318,11 +319,12 @@ export function runAction(identity, action) {
     const from = snapshot.org.version ?? 0;
     const written = changes.org || Object.keys(changes.put).length || Object.keys(changes.del).length;
     const to = written ? await bumpVersion(snapshot.org._id) : from;
+    const pushes = pushNotifications({ state, changes, actorId: account.userId, now });
     const emails = notificationEmails({ state, changes, action, actorId: account.userId, now, appUrl, timeZone: process.env.MACROKITE_TIME_ZONE });
     const put = changes.put.notifications ? { ...changes.put, notifications: ownNotifications(changes.put.notifications, account.userId) } : changes.put;
     // When nobody else wrote in between, the browser's copy plus these changes is the new version.
     const version = to === from + 1 ? { from, to } : null;
-    return { result: delivered, changes: { ...changes, put }, version, emails, files: deletedFiles(snapshot, changes) };
+    return { result: delivered, changes: { ...changes, put }, version, emails, pushes: pushes.map((p) => ({ ...p, orgId: snapshot.org._id })), files: deletedFiles(snapshot, changes) };
   };
   const next = queue.then(run, run);
   queue = next.catch(() => {});

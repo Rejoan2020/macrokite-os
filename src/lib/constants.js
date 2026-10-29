@@ -36,7 +36,8 @@ export const NOTIFICATION_PREFS = [
   { key: "assignment", label: "A task is assigned to me", hint: "Includes action items from meetings" },
   { key: "meetingInvite", label: "Meetings I’m invited to", hint: "The invite, and its decisions and action items when it ends" },
 ];
-export const DEFAULT_NOTIFICATION_PREFS = { assignment: true, meetingInvite: true };
+// chatMessages: push every message in the team chat, groups and project chats, not just @mentions.
+export const DEFAULT_NOTIFICATION_PREFS = { assignment: true, meetingInvite: true, chatMessages: false };
 
 // Files sent in chat: the size limit per file and how many go in one message.
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
