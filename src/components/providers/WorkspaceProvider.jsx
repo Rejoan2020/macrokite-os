@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { databaseAdapter, demoAdapter, fetchOlderMessages, fetchWorkspace } from "@/lib/client/storage";
+import { databaseAdapter, demoAdapter, fetchOlderMessages, fetchWorkspace, OPTIMISTIC_ACTIONS, pendingAction, withPending } from "@/lib/client/storage";
 import { keepLoadedHistory, withOlderMessages } from "@/lib/history";
 import { indexById, unreadByConversation } from "@/lib/selectors";
 
@@ -28,13 +28,20 @@ export function WorkspaceProvider({ children }) {
   const [onboarding, setOnboarding] = useState(null); // { removed, canCreate } when not in a workspace
   const [data, setData] = useState(null);
   const [currentUserId, setCurrentUserId] = useState(null);
-  const stateRef = useRef(null);
+  const stateRef = useRef(null); // the data as the server (or demo storage) has it
+  const pendingRef = useRef([]); // database-mode actions shown before the server confirms them
   const queueRef = useRef(Promise.resolve());
 
-  const commit = useCallback((next) => {
-    stateRef.current = next;
-    setData(next);
-  }, []);
+  // What's shown: the saved data plus the actions still on their way to the server.
+  const show = useCallback(() => setData(pendingRef.current.length ? withPending(stateRef.current, pendingRef.current) : stateRef.current), []);
+
+  const commit = useCallback(
+    (next) => {
+      stateRef.current = next;
+      show();
+    },
+    [show]
+  );
 
   const applyLoaded = useCallback(
     ({ mode, status, currentUserId, data, account, onboarding }) => {
@@ -83,14 +90,31 @@ export function WorkspaceProvider({ children }) {
   }, []);
 
   const dispatch = useCallback(
-    (action) =>
-      enqueue(async () => {
+    (action) => {
+      // Some actions show right away; the server's reply then replaces them, or removes them if it fails.
+      const entry = mode === "database" && OPTIMISTIC_ACTIONS.has(action.type) ? pendingAction(action, currentUserId) : null;
+      const settle = () => (pendingRef.current = pendingRef.current.filter((p) => p !== entry));
+      if (entry) {
+        pendingRef.current = [...pendingRef.current, entry];
+        show();
+      }
+      return enqueue(async () => {
         const adapter = mode === "database" ? databaseAdapter : demoAdapter;
-        const { state, result } = await adapter.dispatch(stateRef.current, action, currentUserId);
-        commit(state);
-        return result;
-      }),
-    [enqueue, mode, currentUserId, commit]
+        try {
+          const { state, result } = await adapter.dispatch(stateRef.current, action, currentUserId);
+          settle();
+          commit(state);
+          return result;
+        } catch (error) {
+          if (entry) {
+            settle();
+            show();
+          }
+          throw error;
+        }
+      });
+    },
+    [enqueue, mode, currentUserId, commit, show]
   );
 
   /**

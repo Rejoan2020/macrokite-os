@@ -82,6 +82,35 @@ async function call(method, url, body) {
   return payload;
 }
 
+/**
+ * Database-mode actions shown before the server replies (optimistic updates): sending messages,
+ * ticking tasks and marking things read. Everything else waits for the server.
+ */
+export const OPTIMISTIC_ACTIONS = new Set(["message.create", "dm.send", "task.comment", "task.toggle", "conversation.read", "notification.read", "notification.readAll"]);
+
+/** An action waiting for the server, to show in the meantime. Its time and new ids stay fixed while it waits. */
+export const pendingAction = (action, userId) => ({ action, userId, now: new Date(), ids: [] });
+
+/**
+ * The server's data with the actions still waiting for it applied by the same engine. Messages they
+ * add are marked `pending`. An action the browser can't apply is left to the server's reply.
+ */
+export function withPending(confirmed, pending) {
+  let state = confirmed;
+  for (const entry of pending) {
+    let i = 0;
+    const ids = (prefix) => (entry.ids[i++] ??= newId(prefix));
+    try {
+      const { state: next, changes } = applyAction(state, entry.action, { orgId: state.org._id, userId: entry.userId, now: entry.now, newId: ids });
+      const added = new Set((changes.put.messages ?? []).map((m) => m._id));
+      state = added.size ? { ...next, messages: next.messages.map((m) => (added.has(m._id) ? { ...m, pending: true } : m)) } : next;
+    } catch {
+      // Shown once the server replies, or reported then.
+    }
+  }
+  return state;
+}
+
 export const databaseAdapter = {
   mode: "database",
   async dispatch(state, action) {

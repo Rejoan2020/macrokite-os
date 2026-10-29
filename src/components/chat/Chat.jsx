@@ -358,7 +358,7 @@ export function ChannelMessage({ message, onCreateTask }) {
     );
   }
   return (
-    <article className="group relative flex gap-3">
+    <article className={cx("group relative flex gap-3", message.pending && "opacity-60")} aria-busy={message.pending || undefined}>
       <Avatar user={author} size="chat" />
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
         <div className="flex items-baseline gap-2">
@@ -380,7 +380,7 @@ export function ChannelMessage({ message, onCreateTask }) {
         <MessageAttachments message={message} />
         {message.body && <LinkCards body={message.body} />}
       </div>
-      {(onCreateTask || canEdit || canDelete) && !editing && (
+      {(onCreateTask || canEdit || canDelete) && !editing && !message.pending && (
         <div className="reveal absolute -top-1 right-0 flex items-center gap-1.5 transition-opacity">
           {onCreateTask && (
             <button
@@ -457,7 +457,6 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef(null);
   const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
   const [caret, setCaret] = useState(0);
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState(null);
@@ -493,18 +492,20 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
 
   const ready = Boolean(body.trim() || uploads.ready.length) && !uploads.uploading && !uploads.failed;
 
+  // Clears right away: the message shows in the conversation while it's sent, and comes back here
+  // (text and files) if it can't be.
   const send = async (e) => {
     e?.preventDefault();
-    if (!ready || sending) return;
-    setSending(true);
-    const ok = await onSend(body.trim(), uploads.ready);
-    setSending(false);
-    if (ok) {
-      setBody("");
-      setCaret(0);
-      uploads.clear();
-    }
+    if (!ready) return;
+    const text = body.trim();
+    const attachments = uploads.ready;
+    const taken = uploads.take();
+    setBody("");
+    setCaret(0);
     ref.current?.focus();
+    if (await onSend(text, attachments)) return uploads.release(taken);
+    setBody((current) => current || text);
+    uploads.restore(taken);
   };
 
   const onPaste = (e) => {
@@ -627,7 +628,7 @@ export function Composer({ placeholder, label, onSend, hint, compact, people = [
           aria-activedescendant={open ? `${listId}-${active}` : undefined}
           className="min-w-0 flex-1 resize-none bg-transparent py-2.5 text-sm leading-normal text-fg outline-none placeholder:text-faint"
         />
-        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" loading={sending} disabled={!ready} className={compact ? "h-10 px-[18px]" : ""}>
+        <Button variant="primary" size={compact ? "sm" : "md"} type="submit" disabled={!ready} className={compact ? "h-10 px-[18px]" : ""}>
           Send
         </Button>
       </label>

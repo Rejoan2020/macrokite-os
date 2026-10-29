@@ -111,11 +111,23 @@ export function useUploads() {
     commit([]);
   }, [commit]);
 
+  /** Takes the files out for sending. `restore` puts them back if it fails; `release` frees them once sent. */
+  const take = () => {
+    const taken = filesRef.current;
+    commit([]);
+    return taken;
+  };
+  const restore = (taken) => commit([...taken, ...filesRef.current]);
+  const release = (taken) => taken.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
+
   return {
     files,
     add,
     remove,
     clear,
+    take,
+    restore,
+    release,
     uploading: files.some((f) => f.status === "uploading"),
     failed: files.some((f) => f.status === "error"),
     ready: files.filter((f) => f.status === "done").map((f) => f.attachment),
