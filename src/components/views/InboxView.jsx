@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Search } from "lucide-react";
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { ChannelMessage, Composer, conversationMessages, EarlierMessages, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
+import { ChannelMessage, Composer, EarlierMessages, useConversationMessages, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
 import { splitLayout } from "@/components/views/TaskDetailView";
 import { ActionMenu } from "@/components/ui/ActionMenu";
 import { Avatar, AvatarStack, Button, cx, LogoTile } from "@/components/ui/primitives";
@@ -26,13 +26,13 @@ const groupName = (conversation) => (conversation.type === "general" ? TEAM_CHAN
  */
 export function InboxView() {
   const { id } = useParams();
-  const { data, chats, unread, lookup, currentUserId } = useWorkspace();
+  const { data, chats, threads, unread, lookup, currentUserId } = useWorkspace();
   const overlays = useOverlays();
   const [query, setQuery] = useState("");
   const [picking, setPicking] = useState(false);
   useLiveUpdates();
 
-  const lastOf = (conversation) => (conversation ? conversationMessages(data, conversation._id).at(-1) ?? null : null);
+  const lastOf = (conversation) => (conversation ? threads[conversation._id]?.at(-1) ?? null : null);
   const byRecent = (a, b) => (b.last?.createdAt ?? b.conversation?.createdAt ?? "").localeCompare(a.last?.createdAt ?? a.conversation?.createdAt ?? "");
 
   const groups = [chats.general, ...chats.groups]
@@ -200,10 +200,10 @@ function Feed({ conversationId, messages, emptyText, onCreateTask }) {
 }
 
 function DirectConversation({ other }) {
-  const { data, chats } = useWorkspace();
+  const { chats } = useWorkspace();
   const { run } = useAction();
   const conversation = chats.dms[other._id];
-  const messages = conversation ? conversationMessages(data, conversation._id) : [];
+  const messages = useConversationMessages(conversation?._id);
   const createTask = useTaskFromMessage();
   useMarkRead(conversation?._id);
 
@@ -227,7 +227,7 @@ function DirectConversation({ other }) {
 function GroupConversation({ conversation }) {
   const { data, lookup, currentUserId } = useWorkspace();
   const overlays = useOverlays();
-  const messages = conversationMessages(data, conversation._id);
+  const messages = useConversationMessages(conversation._id);
   const send = useSendMessage(conversation._id);
   const createTask = useTaskFromMessage();
   useMarkRead(conversation._id);

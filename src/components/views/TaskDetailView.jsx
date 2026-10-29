@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { ChannelMessage, Composer, conversationMessages, EarlierMessages, useMarkRead, useStickToBottom, withDayDividers } from "@/components/chat/Chat";
+import { ChannelMessage, Composer, EarlierMessages, useConversationMessages, useMarkRead, useStickToBottom, withDayDividers } from "@/components/chat/Chat";
 import { TaskStatusSelect } from "@/components/tasks/TaskRow";
 import { useTaskAccess } from "@/components/tasks/taskHooks";
 import { ActionMenu } from "@/components/ui/ActionMenu";
@@ -307,7 +307,7 @@ function Activity({ task }) {
   const { data, lookup, chats, currentUserId } = useWorkspace();
   const { run } = useAction();
   const thread = chats.tasks[task._id];
-  const messages = thread ? conversationMessages(data, thread._id) : [];
+  const messages = useConversationMessages(thread?._id);
   const listRef = useStickToBottom(messages.at(-1)?._id);
   useMarkRead(thread?._id);
   useLiveUpdates();

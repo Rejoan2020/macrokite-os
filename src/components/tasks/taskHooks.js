@@ -3,15 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { conversationMessages } from "@/components/chat/Chat";
 import { canEditTask, canManageTasks, canSetTaskStatus } from "@/lib/permissions";
 
 /** Comment count and unread count of a task's discussion. */
 export function useTaskThreadSummary(taskId) {
-  const { data, chats, unread } = useWorkspace();
+  const { chats, threads, unread } = useWorkspace();
   const thread = chats.tasks[taskId];
   if (!thread) return { count: 0, unread: 0 };
-  return { count: conversationMessages(data, thread._id).length, unread: unread[thread._id]?.count ?? 0 };
+  return { count: threads[thread._id]?.length ?? 0, unread: unread[thread._id]?.count ?? 0 };
 }
 
 /** What the current user may do with a task: { canEdit, canSetStatus }. */

@@ -89,8 +89,12 @@ export function EarlierMessages({ conversationId, scrollRef, count }) {
   );
 }
 
-export function conversationMessages(data, conversationId) {
-  return data.messages.filter((m) => m.conversationId === conversationId && !m.deletedAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+const NO_MESSAGES = [];
+
+/** A conversation's messages, oldest first, without deleted ones. */
+export function useConversationMessages(conversationId) {
+  const { threads } = useWorkspace();
+  return (conversationId && threads[conversationId]) || NO_MESSAGES;
 }
 
 /** Renders day dividers between messages from different days. */

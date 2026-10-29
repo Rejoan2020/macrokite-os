@@ -142,6 +142,11 @@ export function WorkspaceProvider({ children }) {
       if (c.type === "task") tasks[c.taskId] = c;
       if (c.type === "group" && c.memberIds.includes(currentUserId)) groups.push(c);
     }
+    // Each conversation's messages, oldest first, without deleted ones: grouped once per change
+    // rather than filtered from every message wherever a chat or preview shows.
+    const threads = {};
+    for (const m of data.messages) if (!m.deletedAt) (threads[m.conversationId] ??= []).push(m);
+    for (const list of Object.values(threads)) list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const currentUser = users[currentUserId];
     return {
       status,
@@ -160,6 +165,7 @@ export function WorkspaceProvider({ children }) {
       activeUsers: data.users.filter((u) => u.active),
       unread: unreadByConversation(data, currentUserId),
       chats: { general, projects: projectChats, dms, tasks, groups },
+      threads,
       lookup: {
         users,
         clients: indexById(data.clients),
