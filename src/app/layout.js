@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { Inter } from "next/font/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { AppShell, BootScreen } from "@/components/shell/AppShell";
@@ -59,6 +60,7 @@ export default function RootLayout({ children }) {
             <Workspace>{children}</Workspace>
           </Suspense>
         </ToastProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
