@@ -19,7 +19,8 @@ export function describeNotification(n, data) {
   const userName = (id) => byId("users", id)?.name ?? FORMER_MEMBER;
 
   if (n.targetType === "message") {
-    const message = byId("messages", n.targetId);
+    // Database mode loads recent chat history only; older messages notified about come separately.
+    const message = byId("messages", n.targetId) ?? data.notifiedMessages?.find((m) => m._id === n.targetId);
     const conversation = message && byId("conversations", message.conversationId);
     if (!conversation) return null;
     const actorId = n.actorId ?? message.authorId;

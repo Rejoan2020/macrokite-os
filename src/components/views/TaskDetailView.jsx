@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { ChannelMessage, Composer, conversationMessages, useMarkRead, useStickToBottom, withDayDividers } from "@/components/chat/Chat";
+import { ChannelMessage, Composer, conversationMessages, EarlierMessages, useMarkRead, useStickToBottom, withDayDividers } from "@/components/chat/Chat";
 import { TaskStatusSelect } from "@/components/tasks/TaskRow";
 import { useTaskAccess } from "@/components/tasks/taskHooks";
 import { ActionMenu } from "@/components/ui/ActionMenu";
@@ -308,7 +308,7 @@ function Activity({ task }) {
   const { run } = useAction();
   const thread = chats.tasks[task._id];
   const messages = thread ? conversationMessages(data, thread._id) : [];
-  const listRef = useStickToBottom(messages.length);
+  const listRef = useStickToBottom(messages.at(-1)?._id);
   useMarkRead(thread?._id);
   useLiveUpdates();
 
@@ -324,6 +324,7 @@ function Activity({ task }) {
         </h2>
       </div>
       <div ref={listRef} className="flex-1 overflow-x-hidden overflow-y-auto px-[22px] py-[18px]">
+        <EarlierMessages conversationId={thread?._id} scrollRef={listRef} count={messages.length} />
         {messages.length ? (
           <div className="flex flex-col gap-5">{withDayDividers(messages, (m) => <ChannelMessage message={m} />)}</div>
         ) : (
