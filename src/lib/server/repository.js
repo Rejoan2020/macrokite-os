@@ -5,10 +5,12 @@ import { canCreateWorkspace, matchMembers, newMember, newWorkspace, pickMembersh
 import { SCHEMA_VERSION } from "../seed";
 import { normalizeSnapshot } from "../compat";
 import { notificationEmails } from "../emails";
+import { olderPage, PAGE_FETCH, RECENT_FETCH, recentMessages } from "../history";
+import { actionReads } from "../reads";
 import { connectToDatabase } from "./db";
 import { appUrl } from "./email";
 import { revokeInviteEmail, sendInviteEmail } from "./invitations";
-import { COLLECTION_MODELS, Conversation, Invite, Organization, Project, User } from "./models";
+import { COLLECTION_MODELS, Conversation, Invite, Message, Notification, Organization, Project, User } from "./models";
 
 /**
  * Organization-scoped data access for database mode.
@@ -82,7 +84,15 @@ async function resolveAccount(identity) {
   };
 }
 
-async function loadSnapshot(orgId) {
+// Messages and notifications grow without limit, so they are loaded selectively; everything else
+// is loaded whole.
+const SHARED_COLLECTIONS = Object.keys(COLLECTION_MODELS).filter((name) => name !== "messages" && name !== "notifications");
+
+/**
+ * The organization's records, with messages and notifications empty except what `reads` asks for
+ * (see actionReads).
+ */
+async function loadSnapshot(orgId, reads = []) {
   const org = await Organization.findById(orgId).lean();
   if (!org) throw new DomainError("Workspace not found.", { status: 404 });
   if (org.schemaVersion !== SCHEMA_VERSION) {
@@ -91,18 +101,51 @@ async function loadSnapshot(orgId) {
       { status: 409 }
     );
   }
-  const snapshot = { org };
-  const entries = Object.entries(COLLECTION_MODELS);
-  const results = await Promise.all(entries.map(([, Model]) => Model.find({ orgId: org._id }).lean()));
-  entries.forEach(([name], i) => (snapshot[name] = results[i]));
+  const snapshot = { org, messages: [], notifications: [] };
+  const results = await Promise.all(SHARED_COLLECTIONS.map((name) => COLLECTION_MODELS[name].find({ orgId: org._id }).lean()));
+  SHARED_COLLECTIONS.forEach((name, i) => (snapshot[name] = results[i]));
   const renamed = renamedCompanyProject(snapshot.projects, new Date());
   if (renamed) {
     // Matching on the old name keeps this a one-time rename even with concurrent requests.
     await Project.updateOne({ _id: renamed._id, orgId: org._id, name: "Internal" }, { $set: { name: renamed.name, updatedAt: renamed.updatedAt } });
     snapshot.projects = snapshot.projects.map((p) => (p._id === renamed._id ? renamed : p));
   }
+  for (const [name, filter] of reads) {
+    const query = typeof filter === "function" ? filter(snapshot) : filter;
+    // orgId last, so a filter can never widen the query beyond the organization.
+    if (query) snapshot[name] = await COLLECTION_MODELS[name].find({ ...query, orgId: org._id }).lean();
+  }
   return normalizeSnapshot(snapshot);
 }
+
+const hiddenFrom = (conversation, userId) => (conversation.type === "dm" || conversation.type === "group") && !conversation.memberIds.includes(userId);
+
+/** The newest RECENT_FETCH messages (newest first) of each conversation the member can see, in one query. */
+const recentByConversation = (orgId, userId) =>
+  Conversation.aggregate([
+    { $match: { orgId, $or: [{ type: { $nin: ["dm", "group"] } }, { memberIds: userId }] } },
+    { $project: { _id: 1 } },
+    {
+      $lookup: {
+        from: Message.collection.name,
+        localField: "_id",
+        foreignField: "conversationId",
+        pipeline: [{ $match: { orgId } }, { $sort: { createdAt: -1 } }, { $limit: RECENT_FETCH }],
+        as: "recent",
+      },
+    },
+  ]);
+
+const NOTIFICATION_LIMIT = 100;
+
+/** The member's newest notifications, each with the message it's about (when it's about one). */
+const latestNotifications = (orgId, userId) =>
+  Notification.aggregate([
+    { $match: { orgId, userId } },
+    { $sort: { createdAt: -1 } },
+    { $limit: NOTIFICATION_LIMIT },
+    { $lookup: { from: Message.collection.name, localField: "targetId", foreignField: "_id", pipeline: [{ $match: { orgId } }], as: "message" } },
+  ]);
 
 async function persistChanges(org, changes) {
   const orgId = org._id;
@@ -129,12 +172,49 @@ const accountSummary = (identity) => ({ email: identity.email, name: identity.na
 // Each member only receives their own notifications; the rest of the snapshot is shared.
 const ownNotifications = (notifications, userId) => notifications.filter((n) => n.userId === userId);
 
+/**
+ * The workspace as the member's browser holds it: shared records, the recent messages of the
+ * conversations they can see (data.hasOlder marks those with more), and their latest notifications.
+ * data.notifiedMessages has the messages those notifications point to outside the loaded history.
+ */
 export async function getWorkspace(identity) {
   const account = await resolveAccount(identity);
   if (account.status !== "member") return { ...account, account: accountSummary(identity) };
-  const snapshot = await loadSnapshot(account.orgId);
-  const data = { ...snapshot, notifications: ownNotifications(snapshot.notifications, account.userId) };
-  return { status: "member", account: accountSummary(identity), currentUserId: account.userId, data };
+  const { orgId, userId } = account;
+  const [snapshot, conversations, notifications] = await Promise.all([loadSnapshot(orgId), recentByConversation(orgId, userId), latestNotifications(orgId, userId)]);
+
+  const readAt = Object.fromEntries(snapshot.readStates.filter((r) => r.userId === userId).map((r) => [r.conversationId, r.lastReadAt]));
+  const messages = [];
+  const hasOlder = {};
+  for (const { _id, recent } of conversations) {
+    const window = recentMessages(recent, readAt[_id]);
+    messages.push(...window.messages);
+    if (window.hasOlder) hasOlder[_id] = true;
+  }
+  const loaded = new Set(messages.map((m) => m._id));
+  const notifiedMessages = new Map();
+  for (const { message, ...n } of notifications) {
+    if (message[0] && !loaded.has(message[0]._id)) notifiedMessages.set(message[0]._id, message[0]);
+    snapshot.notifications.push(n);
+  }
+
+  const data = { ...snapshot, messages, hasOlder, notifiedMessages: [...notifiedMessages.values()] };
+  return { status: "member", account: accountSummary(identity), currentUserId: userId, data };
+}
+
+/**
+ * A page of a conversation's messages from before `before` (an ISO time), for scrolling back:
+ * { messages (oldest first), hasOlder }.
+ */
+export async function olderMessages(identity, conversationId, before) {
+  const { orgId, userId } = await requireMember(identity);
+  const conversation = await Conversation.findOne({ _id: conversationId, orgId }).lean();
+  if (!conversation || hiddenFrom(conversation, userId)) throw new DomainError("Conversation not found.", { status: 404 });
+  const newestFirst = await Message.find({ orgId, conversationId, createdAt: { $lt: before } })
+    .sort({ createdAt: -1 })
+    .limit(PAGE_FETCH)
+    .lean();
+  return olderPage(newestFirst);
 }
 
 /** Starts a workspace with the signed-in account as its first admin. */
@@ -198,7 +278,7 @@ function deletedFiles(snapshot, changes) {
 export function runAction(identity, action) {
   const run = async () => {
     const account = await requireMember(identity);
-    const snapshot = await loadSnapshot(account.orgId);
+    const snapshot = await loadSnapshot(account.orgId, actionReads(action, account.userId));
     const now = new Date();
     const { state, changes, result } = applyAction(snapshot, action, { orgId: snapshot.org._id, userId: account.userId, now, newId });
     const delivered = await deliverInviteEmail(identity, snapshot, account.userId, action, changes, result);

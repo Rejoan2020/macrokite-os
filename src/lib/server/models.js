@@ -167,7 +167,7 @@ export const Notification = model(
     readAt: ref,
     createdAt: String,
   },
-  [{ orgId: 1, userId: 1, createdAt: -1 }]
+  [{ orgId: 1, userId: 1, createdAt: -1 }, { orgId: 1, targetId: 1 }]
 );
 
 export const COLLECTION_MODELS = {

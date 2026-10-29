@@ -11,17 +11,46 @@ import { myNotifications } from "../src/lib/notifications.js";
 import { COMPANY_PROJECT, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../src/lib/constants.js";
 import { attachmentFolder, messagePreview } from "../src/lib/attachments.js";
 import { normalizeSnapshot } from "../src/lib/compat.js";
+import { actionReads } from "../src/lib/reads.js";
+import { keepLoadedHistory, MESSAGE_PAGE, newestMessages, olderPage, recentMessages, withOlderMessages } from "../src/lib/history.js";
 
 let n = 0;
 const ctx = { orgId: SEED_ORG_ID, userId: SEED_OWNER_ID, now: new Date(), newId: (p) => `${p}_t${++n}` };
 let state = buildSeed(new Date());
+
+// The subset of MongoDB filters actionReads uses: equality (null also matches a missing field), $in and $or.
+const matchesFilter = (doc, filter) =>
+  Object.entries(filter).every(([key, cond]) => {
+    if (key === "$or") return cond.some((f) => matchesFilter(doc, f));
+    const value = doc[key] ?? null;
+    return cond !== null && typeof cond === "object" ? cond.$in.includes(value) : value === cond;
+  });
+
+/** The snapshot as database mode loads it for an action: only the messages and notifications it reads. */
+function scopedFor(full, action, userId) {
+  const scoped = { ...full, messages: [], notifications: [] };
+  for (const [name, filter] of actionReads(action, userId)) {
+    const query = typeof filter === "function" ? filter(scoped) : filter;
+    if (query) scoped[name] = full[name].filter((d) => matchesFilter(d, query));
+  }
+  return scoped;
+}
+
 const run = (action, context = ctx) => {
+  const start = n;
   const out = applyAction(state, action, context);
   // The changeset must reproduce the same state (this is what database mode persists).
   const replayed = applyChanges(state, out.changes);
   for (const key of COLLECTIONS) {
     assert.deepEqual(replayed[key], out.state[key], `changeset mismatch in ${key}`);
   }
+  // Database mode loads only what the action reads; that must give the same changes and result.
+  const end = n;
+  n = start;
+  const scoped = applyAction(scopedFor(state, action, context.userId), action, context);
+  assert.deepEqual(scoped.changes, out.changes, `${action.type}: changes differ when loading only what it reads`);
+  assert.deepEqual(scoped.result, out.result, `${action.type}: result differs when loading only what it reads`);
+  assert.equal(n, end);
   state = out.state;
   return out.result;
 };
@@ -725,6 +754,38 @@ test("messages can be edited by their author", () => {
   assert.equal(run({ type: "message.edit", id: withFile._id, data: { body: "" } }, as(writer._id)).body, "");
   run({ type: "message.delete", id: withFile._id }, as(writer._id));
   fails({ type: "message.edit", id: withFile._id, data: { body: "back" } }, (e) => assert.equal(e.status, 404), as(writer._id));
+});
+
+test("chat history: recent window, older pages and refreshes", () => {
+  const at = (i) => new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString();
+  const msg = (i, createdAt = at(i)) => ({ _id: `m${i}`, conversationId: "c", createdAt });
+  const newestFirst = (count) => Array.from({ length: count }, (_, i) => msg(count - 1 - i));
+
+  // A short conversation comes whole; a long one sends the newest page and says there's more.
+  assert.deepEqual(recentMessages(newestFirst(10), null), { messages: newestFirst(10).reverse(), hasOlder: false });
+  const long = recentMessages(newestFirst(101), at(100));
+  assert.equal(long.messages.length, MESSAGE_PAGE);
+  assert.equal(long.messages.at(-1)._id, "m100", "oldest first");
+  assert.ok(long.hasOlder);
+  // Everything unread comes too, up to the limit.
+  assert.equal(recentMessages(newestFirst(101), at(30)).messages.length, 70);
+  assert.equal(recentMessages(newestFirst(101), null).messages.length, 100);
+
+  // Messages logged together are never split across pages.
+  const tied = [msg(5), msg(4), msg(3, at(2)), msg(2), msg(1)];
+  assert.deepEqual(newestMessages(tied, 3).map((m) => m._id), ["m5", "m4", "m3", "m2"]);
+  assert.equal(olderPage(newestFirst(MESSAGE_PAGE)).hasOlder, false);
+  assert.equal(olderPage(newestFirst(MESSAGE_PAGE + 1)).hasOlder, true);
+
+  // Scrolling back adds a page; a refresh keeps it, and keeps knowing whether there's more.
+  const loaded = { messages: [msg(50), msg(51)], conversations: [{ _id: "c" }], hasOlder: { c: true } };
+  const scrolled = withOlderMessages(loaded, "c", [msg(48), msg(49)], false);
+  assert.deepEqual(scrolled.messages.map((m) => m._id), ["m48", "m49", "m50", "m51"]);
+  const refreshed = keepLoadedHistory(scrolled, { messages: [msg(51), msg(52)], conversations: [{ _id: "c" }], hasOlder: { c: true } });
+  assert.deepEqual(refreshed.messages.map((m) => m._id).sort(), ["m48", "m49", "m50", "m51", "m52"]);
+  assert.equal(refreshed.hasOlder.c, false);
+  // A conversation that's gone takes its history with it.
+  assert.equal(keepLoadedHistory(scrolled, { messages: [], hasOlder: {} }).messages.length, 0);
 });
 
 console.log("\nall engine checks passed");

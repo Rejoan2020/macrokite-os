@@ -96,5 +96,9 @@ export const databaseAdapter = {
  */
 export const fetchWorkspace = () => call("GET", "/api/workspace");
 
+/** A page of a conversation's messages sent before `before` (database mode): { messages, hasOlder }. */
+export const fetchOlderMessages = (conversationId, before) =>
+  call("GET", `/api/messages?conversation=${encodeURIComponent(conversationId)}&before=${encodeURIComponent(before)}`);
+
 /** Starts a workspace with the signed-in account as admin (database mode). */
 export const createWorkspace = (name) => call("POST", "/api/workspace", { name });

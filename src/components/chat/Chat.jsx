@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ListPlus, Paperclip, Pencil, Trash2 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
@@ -22,7 +22,7 @@ export function useMarkRead(conversationId) {
   }, [conversationId, count, dispatch]);
 }
 
-/** Keeps a scroll container pinned to the newest message. */
+/** Keeps a scroll container pinned to the newest message. Pass the newest message's id. */
 export function useStickToBottom(dependency) {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -30,6 +30,63 @@ export function useStickToBottom(dependency) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [dependency]);
   return ref;
+}
+
+/**
+ * Loads a conversation's earlier messages when the top of its feed scrolls into view (or on click),
+ * keeping the messages on screen where they were. Shown only when the server has more (database
+ * mode). `count` is the number of messages shown.
+ */
+export function EarlierMessages({ conversationId, scrollRef, count }) {
+  const { data, loadOlder } = useWorkspace();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const ref = useRef(null);
+  const busyRef = useRef(false);
+  const fromBottom = useRef(null);
+  const more = Boolean(conversationId && data.hasOlder?.[conversationId]);
+
+  // Messages added above would push the ones being read down; keep the same distance from the bottom.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el && fromBottom.current !== null) el.scrollTop = el.scrollHeight - fromBottom.current;
+    fromBottom.current = null;
+  }, [count, scrollRef]);
+
+  const load = useCallback(async () => {
+    const el = scrollRef.current;
+    if (busyRef.current || !el) return;
+    busyRef.current = true;
+    setBusy(true);
+    setFailed(false);
+    try {
+      fromBottom.current = el.scrollHeight - el.scrollTop;
+      await loadOlder(conversationId);
+    } catch {
+      fromBottom.current = null;
+      setFailed(true);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [conversationId, loadOlder, scrollRef]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!more || failed || !el) return;
+    const observer = new IntersectionObserver(([entry]) => entry.isIntersecting && load(), { root: scrollRef.current });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [more, failed, load, scrollRef]);
+
+  if (!more) return null;
+  return (
+    <div ref={ref} className="mb-5 flex justify-center">
+      <Button size="sm" variant="quiet" loading={busy} onClick={load}>
+        {failed ? "Couldn’t load earlier messages. Try again" : "Show earlier messages"}
+      </Button>
+    </div>
+  );
 }
 
 export function conversationMessages(data, conversationId) {

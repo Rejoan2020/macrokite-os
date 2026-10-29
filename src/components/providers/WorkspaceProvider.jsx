@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { databaseAdapter, demoAdapter, fetchWorkspace } from "@/lib/client/storage";
+import { databaseAdapter, demoAdapter, fetchOlderMessages, fetchWorkspace } from "@/lib/client/storage";
+import { keepLoadedHistory, withOlderMessages } from "@/lib/history";
 import { indexById, unreadByConversation } from "@/lib/selectors";
 
 const WorkspaceContext = createContext(null);
@@ -99,10 +100,23 @@ export function WorkspaceProvider({ children }) {
       const server = await fetchWorkspace();
       if (server.mode !== "database") return;
       // Removed from the workspace mid-session: show the onboarding screen instead.
-      if (server.status === "member") commit(server.data);
+      if (server.status === "member") commit(keepLoadedHistory(stateRef.current, server.data));
       else applyLoaded(fromServer(server));
     }).catch(() => {});
   }, [enqueue, mode, commit, applyLoaded]);
+
+  /** Adds the page of messages before the oldest one loaded in a conversation (database mode). */
+  const loadOlder = useCallback(
+    async (conversationId) => {
+      if (mode !== "database") return;
+      const loaded = stateRef.current.messages.filter((m) => m.conversationId === conversationId);
+      if (!loaded.length) return;
+      const before = loaded.reduce((oldest, m) => (m.createdAt < oldest ? m.createdAt : oldest), loaded[0].createdAt);
+      const { messages, hasOlder } = await fetchOlderMessages(conversationId, before);
+      commit(withOlderMessages(stateRef.current, conversationId, messages, hasOlder));
+    },
+    [mode, commit]
+  );
 
   const resetDemo = useCallback(() => {
     if (mode !== "demo") return;
@@ -135,6 +149,7 @@ export function WorkspaceProvider({ children }) {
       data,
       dispatch,
       refresh,
+      loadOlder,
       resetDemo,
       currentUser,
       currentUserId,
@@ -152,7 +167,7 @@ export function WorkspaceProvider({ children }) {
         conversations: indexById(data.conversations),
       },
     };
-  }, [data, status, error, mode, account, onboarding, load, dispatch, refresh, resetDemo, currentUserId]);
+  }, [data, status, error, mode, account, onboarding, load, dispatch, refresh, loadOlder, resetDemo, currentUserId]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

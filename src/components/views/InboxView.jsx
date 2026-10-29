@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Search } from "lucide-react";
 import { useLiveUpdates, useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useOverlays } from "@/components/providers/OverlayProvider";
-import { ChannelMessage, Composer, conversationMessages, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
+import { ChannelMessage, Composer, conversationMessages, EarlierMessages, useMarkRead, useSendMessage, useStickToBottom, useTaskFromMessage, withDayDividers } from "@/components/chat/Chat";
 import { splitLayout } from "@/components/views/TaskDetailView";
 import { ActionMenu } from "@/components/ui/ActionMenu";
 import { Avatar, AvatarStack, Button, cx, LogoTile } from "@/components/ui/primitives";
@@ -185,10 +185,11 @@ const conversationCard = "flex min-h-[calc(100dvh-5.5rem)] min-w-0 flex-1 flex-c
 const SHARE_HINT = "Paste a Facebook or Instagram link to share a post · @ to mention someone";
 
 /** The feed and composer of a conversation: messages, or a line saying how to start. */
-function Feed({ messages, emptyText, onCreateTask }) {
-  const listRef = useStickToBottom(messages.length);
+function Feed({ conversationId, messages, emptyText, onCreateTask }) {
+  const listRef = useStickToBottom(messages.at(-1)?._id);
   return (
     <div ref={listRef} className="flex-1 overflow-x-hidden overflow-y-auto px-7 pt-5 pb-6">
+      <EarlierMessages conversationId={conversationId} scrollRef={listRef} count={messages.length} />
       {messages.length ? (
         <div className="flex flex-col gap-5">{withDayDividers(messages, (m) => <ChannelMessage message={m} onCreateTask={onCreateTask} />)}</div>
       ) : (
@@ -211,7 +212,7 @@ function DirectConversation({ other }) {
   return (
     <section aria-label={`Conversation with ${other.name}`} className={conversationCard}>
       <ConversationHeader leading={<Avatar user={other} size="row" />} title={other.name} subtitle={other.active ? other.email : "Removed from the team"} />
-      <Feed messages={messages} emptyText={`Start your conversation with ${firstName(other.name)}.`} onCreateTask={createTask} />
+      <Feed conversationId={conversation?._id} messages={messages} emptyText={`Start your conversation with ${firstName(other.name)}.`} onCreateTask={createTask} />
       <div className="border-t border-row px-7 pt-3.5 pb-4">
         {other.active ? (
           <Composer label={`Message ${other.name}`} placeholder={`Message ${firstName(other.name)}`} onSend={send} />
@@ -248,7 +249,7 @@ function GroupConversation({ conversation }) {
           </>
         }
       />
-      <Feed messages={messages} emptyText={`No messages in ${name} yet. Say hello.`} onCreateTask={createTask} />
+      <Feed conversationId={conversation._id} messages={messages} emptyText={`No messages in ${name} yet. Say hello.`} onCreateTask={createTask} />
       <div className="border-t border-row px-7 pt-3.5 pb-4">
         <Composer label={`Message ${name}`} placeholder={`Message ${name}`} onSend={send} people={members.filter((u) => u._id !== currentUserId)} hint={SHARE_HINT} />
       </div>
