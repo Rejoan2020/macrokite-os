@@ -7,9 +7,12 @@ import { indexById, unreadByConversation } from "@/lib/selectors";
 
 const WorkspaceContext = createContext(null);
 
-/** Database mode when the server has MongoDB configured; otherwise browser demo storage. */
-async function resolveWorkspace() {
-  const server = await fetchWorkspace();
+/**
+ * Database mode when the server has MongoDB configured; otherwise browser demo storage. `initial` is
+ * the server's reply when the page brought it along; otherwise it's fetched.
+ */
+async function resolveWorkspace(initial) {
+  const server = initial ?? (await fetchWorkspace());
   if (server.mode === "database") return fromServer(server);
   const local = demoAdapter.load();
   return { mode: "demo", status: "ready", currentUserId: local.currentUserId, data: local.data, account: null, onboarding: null };
@@ -20,7 +23,7 @@ function fromServer({ status, account, currentUserId, data, removed, canCreate }
   return { mode: "database", status: "onboarding", currentUserId: null, data: null, account, onboarding: { removed, canCreate } };
 }
 
-export function WorkspaceProvider({ children }) {
+export function WorkspaceProvider({ initial = null, children }) {
   const [status, setStatus] = useState("loading"); // loading | ready | onboarding | error
   const [error, setError] = useState(null);
   const [mode, setMode] = useState(null);
@@ -61,9 +64,11 @@ export function WorkspaceProvider({ children }) {
     setStatus("error");
   }, []);
 
+  // Applied after the first render rather than as initial state, so the server-rendered HTML (the
+  // boot screen) matches; the page's data comes with it, so there's no request to wait for.
   useEffect(() => {
-    resolveWorkspace().then(applyLoaded, applyError);
-  }, [applyLoaded, applyError]);
+    resolveWorkspace(initial).then(applyLoaded, applyError);
+  }, [initial, applyLoaded, applyError]);
 
   const load = useCallback(() => {
     setStatus("loading");
